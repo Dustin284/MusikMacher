@@ -1,0 +1,717 @@
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
+import { useTrackStore } from '../store/useTrackStore'
+import { usePlayerStore } from '../store/usePlayerStore'
+import { useSettingsStore } from '../store/useSettingsStore'
+import { useTranslation } from '../i18n/useTranslation'
+import { formatTime } from '../utils/formatTime'
+import { getAudioBlob } from '../db/database'
+import { detectBPM, detectKey } from '../utils/audioAnalysis'
+import TagAssignmentPopover from './TagAssignmentPopover'
+import TrackContextMenu from './TrackContextMenu'
+import type { Track } from '../types'
+
+const ROW_HEIGHT = 41
+const OVERSCAN = 20
+
+type SortField = 'name' | 'length' | 'createdAt' | 'comment' | 'bpm' | 'musicalKey' | 'rating'
+
+interface TrackGridProps {
+  category: number
+  isActive: boolean
+}
+
+export default function TrackGrid({ category, isActive }: TrackGridProps) {
+  const tracks = useTrackStore(s => s.tracks)
+  const tags = useTrackStore(s => s.tags)
+  const searchTerm = useTrackStore(s => s.searchTerm)
+  const setSearchTerm = useTrackStore(s => s.setSearchTerm)
+  const showHidden = useTrackStore(s => s.showHidden)
+  const setShowHidden = useTrackStore(s => s.setShowHidden)
+  const updateTrackComment = useTrackStore(s => s.updateTrackComment)
+  const hideTrack = useTrackStore(s => s.hideTrack)
+  const unhideTrack = useTrackStore(s => s.unhideTrack)
+  const deleteTrackFromStore = useTrackStore(s => s.deleteTrack)
+  const updateTrackBPM = useTrackStore(s => s.updateTrackBPM)
+  const updateTrackKey = useTrackStore(s => s.updateTrackKey)
+  const updateTrackRating = useTrackStore(s => s.updateTrackRating)
+  const addTrackToTag = useTrackStore(s => s.addTrackToTag)
+  const removeTrackFromTag = useTrackStore(s => s.removeTrackFromTag)
+  const importTracks = useTrackStore(s => s.importTracks)
+  const findDuplicates = useTrackStore(s => s.findDuplicates)
+  const settings = useSettingsStore(s => s.settings)
+  const play = usePlayerStore(s => s.play)
+  const addToQueue = usePlayerStore(s => s.addToQueue)
+  const currentTrackId = usePlayerStore(s => s.currentTrack?.id)
+  const isPlaying = usePlayerStore(s => s.isPlaying)
+  const { t, language } = useTranslation()
+
+  const [sortField, setSortField] = useState<SortField>('name')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  const [selectedIndex, setSelectedIndex] = useState<number>(-1)
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
+  const [editingComment, setEditingComment] = useState('')
+  const [isDragOver, setIsDragOver] = useState(false)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; track: Track } | null>(null)
+  const [selectedTrackIds, setSelectedTrackIds] = useState<Set<number>>(new Set())
+  const batchMode = selectedTrackIds.size > 0
+  const [duplicateIds, setDuplicateIds] = useState<Set<number> | null>(null)
+  const tableRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const dragCountRef = useRef(0)
+  const draggingTrackRef = useRef<{ id: number; name: string } | null>(null)
+  const nativeDragStartedRef = useRef(false)
+  const [scrollTop, setScrollTop] = useState(0)
+  const [viewHeight, setViewHeight] = useState(800)
+
+  const tagMap = useMemo(() => new Map(tags.map(t => [t.id!, t])), [tags])
+
+  const filteredTracks = useMemo(() => {
+    const activeTags = tags.filter(t => t.isChecked)
+    const terms = searchTerm.toLowerCase().split(/\s+/).filter(Boolean)
+    return tracks.filter(track => {
+      if (!showHidden && track.isHidden) return false
+      if (terms.length > 0) {
+        const nameLC = track.name.toLowerCase()
+        const commentLC = track.comment.toLowerCase()
+        if (!terms.every(t => nameLC.includes(t) || commentLC.includes(t))) return false
+      }
+      if (activeTags.length > 0) {
+        if (settings.andTagCombination) {
+          return activeTags.every(tag => track.tagIds.includes(tag.id!))
+        } else {
+          return activeTags.some(tag => track.tagIds.includes(tag.id!))
+        }
+      }
+      return true
+    })
+  }, [tracks, tags, searchTerm, showHidden, settings.andTagCombination])
+
+  const sortedTracks = useMemo(() => {
+    const base = duplicateIds ? filteredTracks.filter(t => duplicateIds.has(t.id!)) : filteredTracks
+    const sorted = [...base]
+    sorted.sort((a, b) => {
+      let cmp = 0
+      switch (sortField) {
+        case 'name': cmp = a.name.localeCompare(b.name); break
+        case 'length': cmp = a.length - b.length; break
+        case 'createdAt': cmp = a.createdAt.localeCompare(b.createdAt); break
+        case 'comment': cmp = a.comment.localeCompare(b.comment); break
+        case 'bpm': cmp = (a.bpm || 0) - (b.bpm || 0); break
+        case 'musicalKey': cmp = (a.musicalKey || '').localeCompare(b.musicalKey || ''); break
+        case 'rating': cmp = (a.rating || 0) - (b.rating || 0); break
+      }
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+    return sorted
+  }, [filteredTracks, sortField, sortDir, duplicateIds])
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortField(field); setSortDir('asc') }
+  }
+
+  // Arrow key navigation - only when active
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (!isActive) return
+    const target = e.target as HTMLElement
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      const newIdx = Math.min(selectedIndex + 1, sortedTracks.length - 1)
+      setSelectedIndex(newIdx)
+      if (newIdx >= 0 && newIdx < sortedTracks.length) play(sortedTracks[newIdx])
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      const newIdx = Math.max(selectedIndex - 1, 0)
+      setSelectedIndex(newIdx)
+      if (newIdx >= 0 && newIdx < sortedTracks.length) play(sortedTracks[newIdx])
+    } else if (e.key === 'Enter' && selectedIndex >= 0 && selectedIndex < sortedTracks.length) {
+      e.preventDefault()
+      play(sortedTracks[selectedIndex])
+    } else if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+      e.preventDefault()
+      searchRef.current?.focus()
+      searchRef.current?.select()
+    }
+  }, [sortedTracks, selectedIndex, play, isActive])
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [handleKeyDown])
+
+  // Scroll selected row into view (calculated position, no DOM query)
+  useEffect(() => {
+    if (selectedIndex >= 0 && tableRef.current) {
+      const el = tableRef.current
+      const targetTop = selectedIndex * ROW_HEIGHT
+      const headerH = 36
+      if (targetTop < el.scrollTop) {
+        el.scrollTop = targetTop
+      } else if (targetTop + ROW_HEIGHT > el.scrollTop + el.clientHeight - headerH) {
+        el.scrollTop = targetTop + ROW_HEIGHT - el.clientHeight + headerH
+      }
+    }
+  }, [selectedIndex])
+
+  // Track scroll position + container size for virtualization
+  useEffect(() => {
+    const el = tableRef.current
+    if (!el) return
+    const onScroll = () => setScrollTop(el.scrollTop)
+    const ro = new ResizeObserver((entries) => {
+      setViewHeight(entries[0].contentRect.height)
+    })
+    el.addEventListener('scroll', onScroll, { passive: true })
+    ro.observe(el)
+    return () => {
+      el.removeEventListener('scroll', onScroll)
+      ro.disconnect()
+    }
+  }, [])
+
+  // Virtual range — only render visible rows + overscan
+  const startRow = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
+  const endRow = Math.min(sortedTracks.length, Math.ceil((scrollTop + viewHeight) / ROW_HEIGHT) + OVERSCAN)
+  const padTop = startRow * ROW_HEIGHT
+  const padBottom = Math.max(0, (sortedTracks.length - endRow) * ROW_HEIGHT)
+
+  const startEditComment = (track: Track) => {
+    setEditingCommentId(track.id!)
+    setEditingComment(track.comment)
+  }
+
+  const finishEditComment = () => {
+    if (editingCommentId !== null) updateTrackComment(editingCommentId, editingComment)
+    setEditingCommentId(null)
+  }
+
+  // Pre-write audio file to temp on mousedown (before drag starts)
+  const handleTrackMouseDown = async (track: Track) => {
+    if (!window.electronAPI?.prepareDrag) return
+    const blob = await getAudioBlob(track.id!)
+    if (!blob) return
+    const buffer = await blob.arrayBuffer()
+    window.electronAPI.prepareDrag(track.name, buffer)
+  }
+
+  // Drag start - set dataTransfer for internal drops (tag assignment)
+  // Electron native drag is triggered later when cursor exits the window
+  const handleDragStart = (e: React.DragEvent, track: Track) => {
+    draggingTrackRef.current = { id: track.id!, name: track.name }
+    nativeDragStartedRef.current = false
+    e.dataTransfer.setData('application/x-track-id', String(track.id))
+    e.dataTransfer.effectAllowed = 'copyMove'
+  }
+
+  const handleDragEnd = useCallback(() => {
+    draggingTrackRef.current = null
+    nativeDragStartedRef.current = false
+  }, [])
+
+  // Detect when drag leaves the browser window -> start Electron native file drag
+  useEffect(() => {
+    const handleDocDragLeave = (e: DragEvent) => {
+      if (!draggingTrackRef.current || nativeDragStartedRef.current) return
+      // relatedTarget is null when drag exits the viewport
+      if (e.relatedTarget === null && window.electronAPI?.startDrag) {
+        nativeDragStartedRef.current = true
+        window.electronAPI.startDrag(draggingTrackRef.current.id, draggingTrackRef.current.name)
+      }
+    }
+    document.addEventListener('dragleave', handleDocDragLeave)
+    return () => document.removeEventListener('dragleave', handleDocDragLeave)
+  }, [])
+
+  const handleExport = async (track: Track) => {
+    if (!window.electronAPI) return
+    const blob = await getAudioBlob(track.id!)
+    if (!blob) return
+    const arrayBuffer = await blob.arrayBuffer()
+    await window.electronAPI.saveFile(track.name, arrayBuffer)
+  }
+
+  const handleAddFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    await importTracks(files, category, false)
+  }
+
+  const handleAnalyze = async (track: Track) => {
+    const blob = await getAudioBlob(track.id!)
+    if (!blob) return
+    try {
+      const arrayBuffer = await blob.arrayBuffer()
+      const audioContext = new AudioContext()
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
+      audioContext.close()
+      const bpm = detectBPM(audioBuffer)
+      const key = detectKey(audioBuffer)
+      await updateTrackBPM(track.id!, bpm)
+      await updateTrackKey(track.id!, key)
+      // Sync to player store if this is the current track
+      const ct = usePlayerStore.getState().currentTrack
+      if (ct && ct.id === track.id) {
+        usePlayerStore.setState({ currentTrack: { ...ct, bpm, musicalKey: key } })
+      }
+    } catch { /* analysis failed silently */ }
+  }
+
+  // Batch operations
+  const handleBatchDelete = async () => {
+    for (const id of selectedTrackIds) {
+      await deleteTrackFromStore(id)
+    }
+    setSelectedTrackIds(new Set())
+  }
+
+  const handleBatchRate = (rating: number) => {
+    for (const id of selectedTrackIds) {
+      updateTrackRating(id, rating)
+    }
+  }
+
+  const handleBatchAddToQueue = () => {
+    for (const id of selectedTrackIds) {
+      const track = tracks.find(t => t.id === id)
+      if (track) addToQueue(track)
+    }
+    setSelectedTrackIds(new Set())
+  }
+
+  // Event delegation for tbody clicks
+  const handleTbodyClick = useCallback((e: React.MouseEvent<HTMLTableSectionElement>) => {
+    const tr = (e.target as HTMLElement).closest('tr[data-index]') as HTMLElement | null
+    if (!tr) return
+    const idx = parseInt(tr.dataset.index!, 10)
+    if (isNaN(idx)) return
+
+    // Ctrl+Click for multi-select
+    if (e.ctrlKey || e.metaKey) {
+      const track = sortedTracks[idx]
+      if (track?.id) {
+        setSelectedTrackIds(prev => {
+          const next = new Set(prev)
+          if (next.has(track.id!)) next.delete(track.id!)
+          else next.add(track.id!)
+          return next
+        })
+      }
+      return
+    }
+
+    setSelectedIndex(idx)
+  }, [sortedTracks])
+
+  const handleTbodyDoubleClick = useCallback((e: React.MouseEvent<HTMLTableSectionElement>) => {
+    const tr = (e.target as HTMLElement).closest('tr[data-index]') as HTMLElement | null
+    if (!tr) return
+    const idx = parseInt(tr.dataset.index!, 10)
+    if (isNaN(idx) || idx >= sortedTracks.length) return
+    play(sortedTracks[idx])
+  }, [sortedTracks, play])
+
+  const handleTbodyContextMenu = useCallback((e: React.MouseEvent<HTMLTableSectionElement>) => {
+    const tr = (e.target as HTMLElement).closest('tr[data-index]') as HTMLElement | null
+    if (!tr) return
+    const idx = parseInt(tr.dataset.index!, 10)
+    if (isNaN(idx) || idx >= sortedTracks.length) return
+    e.preventDefault()
+    setSelectedIndex(idx)
+    setContextMenu({ x: e.clientX, y: e.clientY, track: sortedTracks[idx] })
+  }, [sortedTracks])
+
+  const handleFileDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    dragCountRef.current++
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragOver(true)
+    }
+  }, [])
+
+  const handleFileDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    dragCountRef.current--
+    if (dragCountRef.current <= 0) {
+      dragCountRef.current = 0
+      setIsDragOver(false)
+    }
+  }, [])
+
+  const handleFileDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+  }, [])
+
+  const handleFileDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    dragCountRef.current = 0
+    setIsDragOver(false)
+    if (e.dataTransfer.files.length > 0) {
+      handleAddFiles(e.dataTransfer.files)
+    }
+  }, [category])
+
+  const getTagNames = (track: Track) =>
+    track.tagIds.map(id => tagMap.get(id)?.name).filter(Boolean).join(', ')
+
+  const dateLocale = language === 'en-US' ? 'en-US' : 'de-DE'
+  const searchPlaceholder = category === 2 ? t('browse.searchPlaceholderEffects') : t('browse.searchPlaceholder')
+  const noTracksText = category === 2 ? t('browse.noEffects') : t('browse.noTracks')
+
+  const SortHeader = ({ field, children, className = '' }: { field: SortField; children: React.ReactNode; className?: string }) => (
+    <th
+      className={`px-2.5 py-2 cursor-pointer select-none group/sort transition-colors hover:text-primary-500 ${className}`}
+      onClick={() => handleSort(field)}
+    >
+      <span className="flex items-center gap-1">
+        {children}
+        <span className={`transition-opacity ${sortField === field ? 'opacity-100 text-primary-500' : 'opacity-0 group-hover/sort:opacity-40'}`}>
+          {sortField === field && sortDir === 'desc' ? '\u25BC' : '\u25B2'}
+        </span>
+      </span>
+    </th>
+  )
+
+  const addFilesTitle = category === 2 ? t('browse.addFilesEffects') : t('browse.addFiles')
+
+  return (
+    <div
+      className="flex-1 flex flex-col min-w-0 relative"
+      onDragEnter={handleFileDragEnter}
+      onDragLeave={handleFileDragLeave}
+      onDragOver={handleFileDragOver}
+      onDrop={handleFileDrop}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="audio/*"
+        multiple
+        className="hidden"
+        onChange={(e) => { handleAddFiles(e.target.files); e.target.value = '' }}
+      />
+
+      {isDragOver && (
+        <div className="absolute inset-0 z-50 bg-primary-500/10 dark:bg-primary-500/[0.07] border-2 border-dashed border-primary-500/50 rounded-xl flex items-center justify-center pointer-events-none backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-2 text-primary-500">
+            <svg className="w-10 h-10" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            <span className="text-sm font-semibold">{t('browse.dropHere')}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Context menu */}
+      {contextMenu && (
+        <TrackContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          track={tracks.find(t => t.id === contextMenu.track.id) ?? contextMenu.track}
+          onClose={() => setContextMenu(null)}
+          onPlay={(track) => play(track)}
+          onExport={(track) => handleExport(track)}
+          onEditComment={(track) => startEditComment(track)}
+          onToggleHidden={(track) => track.isHidden ? unhideTrack(track.id!) : hideTrack(track.id!)}
+          onDelete={(track) => deleteTrackFromStore(track.id!)}
+          onAnalyze={handleAnalyze}
+          onAddToQueue={(track) => addToQueue(track)}
+          onRate={(track, rating) => updateTrackRating(track.id!, rating)}
+          tags={tags}
+          onTagToggle={(trackId, tagId, add) => {
+            if (add) addTrackToTag(trackId, tagId)
+            else removeTrackFromTag(trackId, tagId)
+          }}
+        />
+      )}
+
+      {/* Search bar */}
+      <div className="p-2.5 flex items-center gap-2.5">
+        <div className="relative flex-1">
+          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-surface-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            ref={searchRef}
+            type="text"
+            placeholder={searchPlaceholder}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-9 pr-3 py-1.5 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all"
+          />
+          {searchTerm && (
+            <button
+              onClick={() => setSearchTerm('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-surface-200 dark:hover:bg-surface-700 transition-colors"
+            >
+              <svg className="w-3.5 h-3.5 text-surface-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="p-1.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white transition-all duration-150 active:scale-95 shadow-sm shadow-primary-500/20 shrink-0"
+          title={addFilesTitle}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+        </button>
+        <button
+          onClick={() => {
+            if (duplicateIds) {
+              setDuplicateIds(null)
+              return
+            }
+            const { groups } = findDuplicates()
+            const ids = new Set<number>()
+            for (const group of groups) {
+              for (const track of group) {
+                if (track.id) ids.add(track.id)
+              }
+            }
+            setDuplicateIds(ids.size > 0 ? ids : null)
+          }}
+          className={`p-1.5 rounded-lg transition-all duration-150 active:scale-95 shrink-0 ${
+            duplicateIds ? 'bg-amber-500/20 text-amber-500' : 'hover:bg-surface-200/80 dark:hover:bg-surface-800/80 text-surface-400'
+          }`}
+          title={t('duplicates.title')}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+        </button>
+        <label className="text-[11px] flex items-center gap-1.5 text-surface-500 cursor-pointer shrink-0">
+          <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} />
+          {t('browse.hidden')}
+        </label>
+      </div>
+
+      {/* Batch bar or Track count */}
+      {batchMode ? (
+        <div className="px-3 pb-1.5 flex items-center gap-2">
+          <span className="text-[11px] text-primary-500 font-semibold">
+            {t('batch.selected', { count: selectedTrackIds.size })}
+          </span>
+          <button onClick={() => setSelectedTrackIds(new Set())} className="text-[11px] text-surface-400 hover:text-surface-600 transition-colors">
+            {t('batch.deselectAll')}
+          </button>
+          <button onClick={() => setSelectedTrackIds(new Set(sortedTracks.map(t => t.id!)))} className="text-[11px] text-surface-400 hover:text-surface-600 transition-colors">
+            {t('batch.selectAll')}
+          </button>
+          <div className="flex-1" />
+          <button onClick={handleBatchAddToQueue} className="px-2 py-0.5 text-[11px] rounded bg-primary-500/10 text-primary-500 hover:bg-primary-500/20 transition-colors font-medium">
+            {t('player.queueAdd')}
+          </button>
+          <div className="flex items-center gap-px">
+            {[1, 2, 3, 4, 5].map(star => (
+              <button key={star} onClick={() => handleBatchRate(star)} className="p-0">
+                <svg className="w-3.5 h-3.5 text-surface-300 dark:text-surface-600 hover:text-amber-400 transition-colors" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                </svg>
+              </button>
+            ))}
+          </div>
+          <button onClick={handleBatchDelete} className="px-2 py-0.5 text-[11px] rounded bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors font-medium">
+            {t('batch.delete')}
+          </button>
+        </div>
+      ) : (
+        <div className="px-3 pb-1.5 text-[11px] text-surface-400 dark:text-surface-500 font-medium">
+          {sortedTracks.length === 1 ? t('browse.trackCountOne') : t('browse.trackCount', { count: sortedTracks.length })}
+        </div>
+      )}
+
+      {/* Table */}
+      <div className="flex-1 overflow-auto" ref={tableRef}>
+        {sortedTracks.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-surface-400 dark:text-surface-600 gap-3">
+            <div className="w-16 h-16 rounded-2xl bg-surface-200/50 dark:bg-surface-800/50 flex items-center justify-center">
+              <svg className="w-8 h-8 opacity-50" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+              </svg>
+            </div>
+            <p className="text-sm font-medium">{noTracksText}</p>
+            <button
+              onClick={() => { setSearchTerm(''); useTrackStore.getState().resetTags() }}
+              className="text-xs text-primary-500 hover:text-primary-600 font-medium transition-colors"
+            >
+              {t('browse.resetFilters')}
+            </button>
+          </div>
+        ) : (
+          <table className="w-full text-[13px]">
+            <thead className="sticky top-0 bg-surface-100/90 dark:bg-surface-900/90 backdrop-blur-md border-b border-surface-200/60 dark:border-surface-800/60 z-10">
+              <tr className="text-surface-500 text-[11px] font-semibold uppercase tracking-wider">
+                <th className="w-9 px-1 py-2" />
+                <SortHeader field="name" className="text-left">{t('browse.name')}</SortHeader>
+                <SortHeader field="length" className="text-right w-20">{t('browse.duration')}</SortHeader>
+                <SortHeader field="bpm" className="text-right w-16">{t('browse.bpm')}</SortHeader>
+                <SortHeader field="musicalKey" className="text-left w-16">{t('browse.key')}</SortHeader>
+                <SortHeader field="rating" className="text-center w-24">{t('browse.rating')}</SortHeader>
+                <SortHeader field="createdAt" className="text-left w-28">{t('browse.created')}</SortHeader>
+                <th className="text-left px-2.5 py-2 w-28">{t('browse.tags')}</th>
+                <SortHeader field="comment" className="text-left w-40">{t('browse.comment')}</SortHeader>
+                {window.electronAPI && <th className="w-9 px-1 py-2" />}
+              </tr>
+            </thead>
+            <tbody
+              onClick={handleTbodyClick}
+              onDoubleClick={handleTbodyDoubleClick}
+              onContextMenu={handleTbodyContextMenu}
+            >
+              {padTop > 0 && <tr><td colSpan={99} style={{ height: padTop, padding: 0, border: 'none' }} /></tr>}
+              {sortedTracks.slice(startRow, endRow).map((track, i) => {
+                const idx = startRow + i
+                const isSelected = idx === selectedIndex
+                const isCurrent = currentTrackId === track.id
+                const isBatchSelected = selectedTrackIds.has(track.id!)
+
+                return (
+                  <tr
+                    key={track.id}
+                    data-index={idx}
+                    draggable
+                    onMouseDown={() => handleTrackMouseDown(track)}
+                    onDragStart={(e) => handleDragStart(e, track)}
+                    onDragEnd={handleDragEnd}
+                    className={`group/row border-b border-surface-100/60 dark:border-surface-800/40 cursor-pointer transition-all duration-100 ${
+                      isBatchSelected
+                        ? 'bg-primary-500/20 dark:bg-primary-500/15'
+                        : isCurrent
+                        ? 'bg-primary-500/10 dark:bg-primary-500/[0.08]'
+                        : isSelected
+                        ? 'bg-surface-200/60 dark:bg-surface-800/60'
+                        : 'hover:bg-surface-100/80 dark:hover:bg-surface-800/40'
+                    } ${track.isHidden ? 'opacity-40' : ''}`}
+                  >
+                    {/* Artwork */}
+                    <td className="px-1.5 py-1">
+                      <div className="w-8 h-8 rounded-md bg-surface-200 dark:bg-surface-700 flex items-center justify-center overflow-hidden shadow-sm">
+                        {track.artworkUrl ? (
+                          <img src={track.artworkUrl} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                        ) : (
+                          <svg className="w-3.5 h-3.5 text-surface-400" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+                          </svg>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Name */}
+                    <td className="px-2.5 py-1.5 truncate max-w-[300px]">
+                      <span className="flex items-center gap-2">
+                        {isCurrent && isPlaying && (
+                          <span className="flex items-end gap-[2px] h-3 w-3 shrink-0">
+                            <span className="w-[2px] rounded-full bg-primary-500 eq-bar-1" />
+                            <span className="w-[2px] rounded-full bg-primary-500 eq-bar-2" />
+                            <span className="w-[2px] rounded-full bg-primary-500 eq-bar-3" />
+                          </span>
+                        )}
+                        <span className={isCurrent ? 'text-primary-600 dark:text-primary-400 font-semibold' : ''}>
+                          {track.name}
+                        </span>
+                      </span>
+                    </td>
+
+                    {/* Duration */}
+                    <td className="px-2.5 py-1.5 text-right text-surface-500 tabular-nums font-mono text-[12px]">
+                      {formatTime(track.length)}
+                    </td>
+
+                    {/* BPM */}
+                    <td className="px-2.5 py-1.5 text-right text-surface-500 tabular-nums font-mono text-[12px]">
+                      {track.bpm ? Math.round(track.bpm) : <span className="text-surface-300 dark:text-surface-700">&mdash;</span>}
+                    </td>
+
+                    {/* Key */}
+                    <td className="px-2.5 py-1.5 text-surface-500 text-[12px]">
+                      {track.musicalKey || <span className="text-surface-300 dark:text-surface-700">&mdash;</span>}
+                    </td>
+
+                    {/* Rating */}
+                    <td className="px-2.5 py-1.5" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onDragStart={(e) => e.preventDefault()}>
+                      <div className="flex items-center justify-center gap-px">
+                        {[1, 2, 3, 4, 5].map(star => (
+                          <button
+                            key={star}
+                            onClick={() => updateTrackRating(track.id!, track.rating === star ? 0 : star)}
+                            className="p-0 transition-colors"
+                          >
+                            <svg
+                              className={`w-3.5 h-3.5 ${(track.rating || 0) >= star ? 'text-amber-400' : 'text-surface-300 dark:text-surface-700 hover:text-amber-300'}`}
+                              fill="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                            </svg>
+                          </button>
+                        ))}
+                      </div>
+                    </td>
+
+                    {/* Created */}
+                    <td className="px-2.5 py-1.5 text-surface-500 text-[12px]">
+                      {new Date(track.createdAt).toLocaleDateString(dateLocale)}
+                    </td>
+
+                    {/* Tags */}
+                    <td className="px-2.5 py-1.5" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onDragStart={(e) => e.preventDefault()}>
+                      <TagAssignmentPopover track={track} tags={tags} tagMap={tagMap} />
+                    </td>
+
+                    {/* Comment */}
+                    <td className="px-2.5 py-1.5" onMouseDown={(e) => e.stopPropagation()} onDragStart={(e) => e.preventDefault()}>
+                      {editingCommentId === track.id ? (
+                        <input
+                          type="text"
+                          value={editingComment}
+                          onChange={(e) => setEditingComment(e.target.value)}
+                          onBlur={finishEditComment}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') finishEditComment()
+                            if (e.key === 'Escape') setEditingCommentId(null)
+                          }}
+                          autoFocus
+                          className="w-full px-1.5 py-0.5 text-[13px] rounded-md border-2 border-primary-500 bg-white dark:bg-surface-800 focus:outline-none"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <span
+                          className="text-[12px] text-surface-500 truncate block max-w-[150px] cursor-text"
+                          onDoubleClick={(e) => { e.stopPropagation(); startEditComment(track) }}
+                        >
+                          {track.comment || <span className="text-surface-300 dark:text-surface-700">&mdash;</span>}
+                        </span>
+                      )}
+                    </td>
+
+                    {/* Export */}
+                    {window.electronAPI && (
+                      <td className="px-1 py-1">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleExport(track) }}
+                          className="p-1 rounded-md opacity-0 group-hover/row:opacity-100 hover:bg-surface-200 dark:hover:bg-surface-700 transition-all"
+                          title={t('browse.export')}
+                        >
+                          <svg className="w-3.5 h-3.5 text-surface-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                          </svg>
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
+              {padBottom > 0 && <tr><td colSpan={99} style={{ height: padBottom, padding: 0, border: 'none' }} /></tr>}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  )
+}
