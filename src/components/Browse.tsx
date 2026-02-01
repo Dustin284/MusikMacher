@@ -70,6 +70,10 @@ export default function Browse({ category, isActive }: BrowseProps) {
       case 'speedDown': store.speedDown(); break
       case 'speedReset': store.speedReset(); break
       case 'abLoopSet': store.toggleABLoop(); break
+      case 'toggleEq': store.toggleEq(); break
+      case 'pitchUp': store.setPitchSemitones(store.pitchSemitones + 1); break
+      case 'pitchDown': store.setPitchSemitones(store.pitchSemitones - 1); break
+      case 'pitchReset': store.resetPitch(); break
       default: {
         // Cue points: cue1-9, setCue1-9
         const cueMatch = match.action.match(/^cue(\d)$/)

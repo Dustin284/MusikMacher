@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { Track, CuePoint, QueueItem } from '../types'
-import { getAudioBlob, updateTrack } from '../db/database'
+import { getAudioBlob, updateTrack, incrementPlayCount } from '../db/database'
 import { useSettingsStore } from './useSettingsStore'
 import { detectBPM, detectKey, computeWaveformPeaks } from '../utils/audioAnalysis'
 
@@ -27,6 +27,15 @@ interface PlayerStore {
   queue: QueueItem[]
   showQueue: boolean
 
+  // EQ
+  eqBass: number
+  eqMid: number
+  eqTreble: number
+  eqEnabled: boolean
+
+  // Pitch
+  pitchSemitones: number
+
   play: (track: Track) => void
   pause: () => void
   playPause: () => void
@@ -43,6 +52,17 @@ interface PlayerStore {
   speedUp: () => void
   speedDown: () => void
   speedReset: () => void
+
+  // EQ
+  setEqBass: (db: number) => void
+  setEqMid: (db: number) => void
+  setEqTreble: (db: number) => void
+  toggleEq: () => void
+  resetEq: () => void
+
+  // Pitch
+  setPitchSemitones: (semitones: number) => void
+  resetPitch: () => void
 
   // A-B Loop
   toggleABLoop: () => void
@@ -63,6 +83,87 @@ interface PlayerStore {
 
 let positionInterval: ReturnType<typeof setInterval> | null = null
 
+// Internal Web Audio API refs (not exposed in store interface)
+let _audioContext: AudioContext | null = null
+let _sourceNode: MediaElementAudioSourceNode | null = null
+let _bassFilter: BiquadFilterNode | null = null
+let _midFilter: BiquadFilterNode | null = null
+let _trebleFilter: BiquadFilterNode | null = null
+let _gainNode: GainNode | null = null
+
+function ensureAudioContext(): AudioContext {
+  if (!_audioContext || _audioContext.state === 'closed') {
+    _audioContext = new AudioContext()
+  }
+  if (_audioContext.state === 'suspended') {
+    _audioContext.resume()
+  }
+  return _audioContext
+}
+
+function connectAudioGraph(audio: HTMLAudioElement) {
+  const ctx = ensureAudioContext()
+
+  // Disconnect old source if exists
+  if (_sourceNode) {
+    try { _sourceNode.disconnect() } catch { /* already disconnected */ }
+    _sourceNode = null
+  }
+
+  _sourceNode = ctx.createMediaElementSource(audio)
+
+  // Create filters if not yet created (reuse across tracks)
+  if (!_bassFilter) {
+    _bassFilter = ctx.createBiquadFilter()
+    _bassFilter.type = 'lowshelf'
+    _bassFilter.frequency.value = 200
+  }
+  if (!_midFilter) {
+    _midFilter = ctx.createBiquadFilter()
+    _midFilter.type = 'peaking'
+    _midFilter.frequency.value = 1000
+    _midFilter.Q.value = 1.0
+  }
+  if (!_trebleFilter) {
+    _trebleFilter = ctx.createBiquadFilter()
+    _trebleFilter.type = 'highshelf'
+    _trebleFilter.frequency.value = 4000
+  }
+  if (!_gainNode) {
+    _gainNode = ctx.createGain()
+    _gainNode.gain.value = 1.0
+  }
+
+  // Disconnect existing filter chain connections before reconnecting
+  try { _bassFilter.disconnect() } catch { /* ok */ }
+  try { _midFilter.disconnect() } catch { /* ok */ }
+  try { _trebleFilter.disconnect() } catch { /* ok */ }
+  try { _gainNode.disconnect() } catch { /* ok */ }
+
+  // Connect chain: source → bass → mid → treble → gain → destination
+  _sourceNode.connect(_bassFilter)
+  _bassFilter.connect(_midFilter)
+  _midFilter.connect(_trebleFilter)
+  _trebleFilter.connect(_gainNode)
+  _gainNode.connect(ctx.destination)
+
+  // Apply current EQ values
+  const state = usePlayerStore.getState()
+  if (state.eqEnabled) {
+    _bassFilter.gain.value = state.eqBass
+    _midFilter.gain.value = state.eqMid
+    _trebleFilter.gain.value = state.eqTreble
+  } else {
+    _bassFilter.gain.value = 0
+    _midFilter.gain.value = 0
+    _trebleFilter.gain.value = 0
+  }
+}
+
+function applyPlaybackRate(audio: HTMLAudioElement, speed: number, semitones: number) {
+  audio.playbackRate = speed * Math.pow(2, semitones / 12)
+}
+
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
   currentTrack: null,
   isPlaying: false,
@@ -78,6 +179,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   abLoopSetting: 'none',
   queue: [],
   showQueue: false,
+  eqBass: 0,
+  eqMid: 0,
+  eqTreble: 0,
+  eqEnabled: true,
+  pitchSemitones: 0,
 
   play: (track) => {
     const { audio: existingAudio, currentTrack, audioBlobUrl } = get()
@@ -227,9 +333,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   // Playback speed
   setPlaybackSpeed: (speed) => {
-    const { audio } = get()
+    const { audio, pitchSemitones } = get()
     const clamped = Math.max(0.25, Math.min(3.0, speed))
-    if (audio) audio.playbackRate = clamped
+    if (audio) applyPlaybackRate(audio, clamped, pitchSemitones)
     set({ playbackSpeed: clamped })
   },
 
@@ -245,6 +351,55 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   speedReset: () => {
     get().setPlaybackSpeed(1.0)
+  },
+
+  // EQ
+  setEqBass: (db) => {
+    const clamped = Math.max(-12, Math.min(12, db))
+    if (_bassFilter && get().eqEnabled) _bassFilter.gain.value = clamped
+    set({ eqBass: clamped })
+  },
+
+  setEqMid: (db) => {
+    const clamped = Math.max(-12, Math.min(12, db))
+    if (_midFilter && get().eqEnabled) _midFilter.gain.value = clamped
+    set({ eqMid: clamped })
+  },
+
+  setEqTreble: (db) => {
+    const clamped = Math.max(-12, Math.min(12, db))
+    if (_trebleFilter && get().eqEnabled) _trebleFilter.gain.value = clamped
+    set({ eqTreble: clamped })
+  },
+
+  toggleEq: () => {
+    const { eqEnabled, eqBass, eqMid, eqTreble } = get()
+    const newEnabled = !eqEnabled
+    if (_bassFilter) _bassFilter.gain.value = newEnabled ? eqBass : 0
+    if (_midFilter) _midFilter.gain.value = newEnabled ? eqMid : 0
+    if (_trebleFilter) _trebleFilter.gain.value = newEnabled ? eqTreble : 0
+    set({ eqEnabled: newEnabled })
+  },
+
+  resetEq: () => {
+    if (_bassFilter) _bassFilter.gain.value = 0
+    if (_midFilter) _midFilter.gain.value = 0
+    if (_trebleFilter) _trebleFilter.gain.value = 0
+    set({ eqBass: 0, eqMid: 0, eqTreble: 0 })
+  },
+
+  // Pitch
+  setPitchSemitones: (semitones) => {
+    const { audio, playbackSpeed } = get()
+    const clamped = Math.max(-6, Math.min(6, Math.round(semitones)))
+    if (audio) applyPlaybackRate(audio, playbackSpeed, clamped)
+    set({ pitchSemitones: clamped })
+  },
+
+  resetPitch: () => {
+    const { audio, playbackSpeed } = get()
+    if (audio) applyPlaybackRate(audio, playbackSpeed, 0)
+    set({ pitchSemitones: 0 })
   },
 
   // A-B Loop
@@ -345,8 +500,10 @@ async function loadAndPlayTrack(trackId: number, track: Track) {
   }
 
   const audio = new Audio(blobUrl)
+  audio.crossOrigin = 'anonymous'
   audio.volume = usePlayerStore.getState().volume
-  audio.playbackRate = usePlayerStore.getState().playbackSpeed
+  const { playbackSpeed, pitchSemitones } = usePlayerStore.getState()
+  applyPlaybackRate(audio, playbackSpeed, pitchSemitones)
 
   const settings = useSettingsStore.getState().settings
 
@@ -365,6 +522,9 @@ async function loadAndPlayTrack(trackId: number, track: Track) {
     audio.play()
     usePlayerStore.setState({ isPlaying: true })
     startPositionUpdate()
+
+    // Increment play count
+    incrementPlayCount(trackId).catch(() => {})
   }
 
   audio.onended = () => {
@@ -383,6 +543,11 @@ async function loadAndPlayTrack(trackId: number, track: Track) {
   }
 
   usePlayerStore.setState({ audio, isPlaying: false, audioBlobUrl: needsRevoke ? blobUrl : null })
+
+  // Connect Web Audio graph for EQ + pitch processing
+  try {
+    connectAudioGraph(audio)
+  } catch { /* audio graph connection failed, playback still works */ }
 
   // Analyze if waveform, BPM or key is missing
   const needsWaveform = !track.waveformData || track.waveformData.length === 0

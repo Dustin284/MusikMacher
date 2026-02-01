@@ -4,7 +4,7 @@ import { useSettingsStore } from '../store/useSettingsStore'
 import { useTranslation } from '../i18n/useTranslation'
 import type { TranslationKey } from '../i18n/translations'
 import { DEFAULT_SHORTCUTS, DEFAULT_VISIBLE_COLUMNS } from '../types'
-import type { KeyboardShortcut } from '../types'
+import type { KeyboardShortcut, AppSettings } from '../types'
 import LogViewer from './LogViewer'
 
 // Shortcut action display names
@@ -20,6 +20,10 @@ const SHORTCUT_ACTIONS: { action: string; labelKey: string }[] = [
   { action: 'speedDown', labelKey: 'shortcut.speedDown' },
   { action: 'speedReset', labelKey: 'shortcut.speedReset' },
   { action: 'abLoopSet', labelKey: 'shortcut.abLoopSet' },
+  { action: 'toggleEq', labelKey: 'shortcut.toggleEq' },
+  { action: 'pitchUp', labelKey: 'shortcut.pitchUp' },
+  { action: 'pitchDown', labelKey: 'shortcut.pitchDown' },
+  { action: 'pitchReset', labelKey: 'shortcut.pitchReset' },
   { action: 'search', labelKey: 'shortcut.search' },
 ]
 for (let i = 1; i <= 9; i++) {
@@ -47,6 +51,7 @@ export default function Settings() {
   const [recordingAction, setRecordingAction] = useState<string | null>(null)
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'none' | 'error'>('idle')
   const [updateInfo, setUpdateInfo] = useState<{ version?: string; url?: string } | null>(null)
+  const [exportImportStatus, setExportImportStatus] = useState<'idle' | 'exported' | 'imported' | 'error'>('idle')
 
   const themes = [
     { value: 'dark' as const, label: t('settings.themeDark'), icon: 'M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z' },
@@ -220,6 +225,77 @@ export default function Settings() {
                 <span className="text-[13px] text-red-500">{t('settings.updateError')}</span>
               )}
             </div>
+          </div>
+        </Section>
+
+        {/* Export / Import */}
+        <Section title={t('settings.exportImport')} icon="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4">
+          <div className="flex flex-col gap-3">
+            <p className="text-[13px] text-surface-500">{t('settings.exportImportDesc')}</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  const json = JSON.stringify(settings, null, 2)
+                  const blob = new Blob([json], { type: 'application/json' })
+                  const url = URL.createObjectURL(blob)
+                  const link = document.createElement('a')
+                  link.href = url
+                  link.download = `lorus-settings-${new Date().toISOString().slice(0, 10)}.json`
+                  document.body.appendChild(link)
+                  link.click()
+                  document.body.removeChild(link)
+                  URL.revokeObjectURL(url)
+                  setExportImportStatus('exported')
+                  setTimeout(() => setExportImportStatus('idle'), 3000)
+                }}
+                className="px-3 py-1.5 text-[13px] font-medium rounded-lg bg-primary-500 hover:bg-primary-600 text-white transition-colors"
+              >
+                {t('settings.exportBtn')}
+              </button>
+              <button
+                onClick={() => {
+                  const input = document.createElement('input')
+                  input.type = 'file'
+                  input.accept = '.json'
+                  input.onchange = async () => {
+                    const file = input.files?.[0]
+                    if (!file) return
+                    try {
+                      const text = await file.text()
+                      const parsed = JSON.parse(text)
+                      if (typeof parsed !== 'object' || parsed === null ||
+                          typeof parsed.windowTitle !== 'string' ||
+                          typeof parsed.language !== 'string' ||
+                          typeof parsed.theme !== 'string' ||
+                          typeof parsed.skipPosition !== 'number') {
+                        setExportImportStatus('error')
+                        setTimeout(() => setExportImportStatus('idle'), 3000)
+                        return
+                      }
+                      await update(parsed as AppSettings)
+                      setExportImportStatus('imported')
+                      setTimeout(() => setExportImportStatus('idle'), 3000)
+                    } catch {
+                      setExportImportStatus('error')
+                      setTimeout(() => setExportImportStatus('idle'), 3000)
+                    }
+                  }
+                  input.click()
+                }}
+                className="px-3 py-1.5 text-[13px] font-medium rounded-lg border border-primary-500 text-primary-500 hover:bg-primary-500/10 transition-colors"
+              >
+                {t('settings.importBtn')}
+              </button>
+            </div>
+            {exportImportStatus === 'exported' && (
+              <span className="text-[13px] text-green-500 font-medium">{t('settings.exportSuccess')}</span>
+            )}
+            {exportImportStatus === 'imported' && (
+              <span className="text-[13px] text-green-500 font-medium">{t('settings.importSuccess')}</span>
+            )}
+            {exportImportStatus === 'error' && (
+              <span className="text-[13px] text-red-500 font-medium">{t('settings.importError')}</span>
+            )}
           </div>
         </Section>
 

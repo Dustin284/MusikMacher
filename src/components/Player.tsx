@@ -1,4 +1,5 @@
-import { memo } from 'react'
+import { memo, useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { usePlayerStore } from '../store/usePlayerStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useTranslation } from '../i18n/useTranslation'
@@ -11,6 +12,124 @@ const PositionTime = memo(function PositionTime() {
   const position = usePlayerStore(s => s.position)
   return <span className="text-[11px] font-mono text-surface-500 w-11 text-right shrink-0 tabular-nums">{formatTime(position)}</span>
 })
+
+const SLIDER_HEIGHT = 120
+const DB_MIN = -12
+const DB_MAX = 12
+const DB_RANGE = DB_MAX - DB_MIN
+
+function EqBandSlider({ value, onChange, label, freq, enabled }: {
+  value: number; onChange: (v: number) => void; label: string; freq: string; enabled: boolean
+}) {
+  const trackRef = useRef<HTMLDivElement>(null)
+  const dragging = useRef(false)
+
+  const dbToY = (db: number) => ((DB_MAX - db) / DB_RANGE) * SLIDER_HEIGHT
+  const yToDb = (y: number) => {
+    const clamped = Math.max(0, Math.min(SLIDER_HEIGHT, y))
+    const raw = DB_MAX - (clamped / SLIDER_HEIGHT) * DB_RANGE
+    return Math.round(raw)
+  }
+
+  const handlePointer = useCallback((e: React.PointerEvent | PointerEvent) => {
+    if (!trackRef.current) return
+    const rect = trackRef.current.getBoundingClientRect()
+    const y = e.clientY - rect.top
+    onChange(yToDb(y))
+  }, [onChange])
+
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault()
+    dragging.current = true
+    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+    handlePointer(e)
+  }, [handlePointer])
+
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    if (dragging.current) handlePointer(e)
+  }, [handlePointer])
+
+  const onPointerUp = useCallback(() => {
+    dragging.current = false
+  }, [])
+
+  const thumbY = dbToY(value)
+  const centerY = dbToY(0)
+  const fillTop = value >= 0 ? thumbY : centerY
+  const fillHeight = Math.abs(thumbY - centerY)
+  const isActive = value !== 0
+
+  return (
+    <div className="flex flex-col items-center gap-1.5 w-12">
+      {/* dB value */}
+      <span className={`text-[10px] font-mono tabular-nums leading-none font-medium ${
+        !enabled ? 'text-surface-400/50' :
+        value > 0 ? 'text-cyan-500' : value < 0 ? 'text-amber-500' : 'text-surface-400'
+      }`}>
+        {value > 0 ? '+' : ''}{value}
+      </span>
+
+      {/* Custom vertical slider */}
+      <div
+        ref={trackRef}
+        className="relative cursor-pointer select-none"
+        style={{ width: 32, height: SLIDER_HEIGHT }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onDoubleClick={() => onChange(0)}
+      >
+        {/* Track background */}
+        <div className="absolute left-1/2 -translate-x-1/2 w-[3px] h-full rounded-full bg-surface-200 dark:bg-surface-700" />
+
+        {/* Center line (0 dB) */}
+        <div
+          className="absolute left-1 right-1 h-[1px] bg-surface-300 dark:bg-surface-600"
+          style={{ top: centerY }}
+        />
+
+        {/* Gain fill bar */}
+        {isActive && enabled && (
+          <div
+            className={`absolute left-1/2 -translate-x-1/2 w-[5px] rounded-full transition-colors ${
+              value > 0 ? 'bg-cyan-500/70' : 'bg-amber-500/70'
+            }`}
+            style={{ top: fillTop, height: Math.max(fillHeight, 1) }}
+          />
+        )}
+
+        {/* Tick marks */}
+        {[-12, -6, 0, 6, 12].map(db => (
+          <div
+            key={db}
+            className={`absolute h-[1px] ${db === 0 ? 'left-1.5 right-1.5 bg-surface-300/60 dark:bg-surface-600/60' : 'left-2.5 right-2.5 bg-surface-200/60 dark:bg-surface-700/40'}`}
+            style={{ top: dbToY(db) }}
+          />
+        ))}
+
+        {/* Thumb */}
+        <div
+          className={`absolute left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 transition-all shadow-sm ${
+            !enabled
+              ? 'bg-surface-300 dark:bg-surface-600 border-surface-400/50'
+              : isActive
+              ? value > 0
+                ? 'bg-cyan-500 border-cyan-400 shadow-cyan-500/30'
+                : 'bg-amber-500 border-amber-400 shadow-amber-500/30'
+              : 'bg-white dark:bg-surface-300 border-surface-300 dark:border-surface-500'
+          }`}
+          style={{ top: thumbY }}
+        />
+      </div>
+
+      {/* Band label + freq */}
+      <div className="flex flex-col items-center">
+        <span className="text-[10px] font-medium text-surface-600 dark:text-surface-400 leading-tight">{label}</span>
+        <span className="text-[8px] font-mono text-surface-400/70 leading-tight">{freq} Hz</span>
+      </div>
+    </div>
+  )
+}
 
 export default function Player() {
   const currentTrack = usePlayerStore(s => s.currentTrack)
@@ -36,9 +155,69 @@ export default function Player() {
   const speedUp = usePlayerStore(s => s.speedUp)
   const speedDown = usePlayerStore(s => s.speedDown)
   const speedReset = usePlayerStore(s => s.speedReset)
+  const eqBass = usePlayerStore(s => s.eqBass)
+  const eqMid = usePlayerStore(s => s.eqMid)
+  const eqTreble = usePlayerStore(s => s.eqTreble)
+  const eqEnabled = usePlayerStore(s => s.eqEnabled)
+  const setEqBass = usePlayerStore(s => s.setEqBass)
+  const setEqMid = usePlayerStore(s => s.setEqMid)
+  const setEqTreble = usePlayerStore(s => s.setEqTreble)
+  const toggleEq = usePlayerStore(s => s.toggleEq)
+  const resetEq = usePlayerStore(s => s.resetEq)
+  const pitchSemitones = usePlayerStore(s => s.pitchSemitones)
+  const setPitchSemitones = usePlayerStore(s => s.setPitchSemitones)
+  const resetPitch = usePlayerStore(s => s.resetPitch)
   const queue = usePlayerStore(s => s.queue)
   const settings = useSettingsStore(s => s.settings)
   const { t } = useTranslation()
+
+  const [showEqPanel, setShowEqPanel] = useState(false)
+  const [eqPanelPos, setEqPanelPos] = useState({ bottom: 0, left: 0 })
+  const eqPanelRef = useRef<HTMLDivElement>(null)
+  const eqButtonRef = useRef<HTMLButtonElement>(null)
+
+  // Compute EQ panel position from button ref
+  const handleEqToggle = useCallback(() => {
+    const newShow = !showEqPanel
+    if (newShow && eqButtonRef.current) {
+      const rect = eqButtonRef.current.getBoundingClientRect()
+      setEqPanelPos({
+        bottom: window.innerHeight - rect.top + 8,
+        left: rect.left + rect.width / 2,
+      })
+    }
+    setShowEqPanel(newShow)
+  }, [showEqPanel])
+
+  // Update EQ panel position on resize
+  useEffect(() => {
+    if (!showEqPanel) return
+    const update = () => {
+      if (!eqButtonRef.current) return
+      const rect = eqButtonRef.current.getBoundingClientRect()
+      setEqPanelPos({
+        bottom: window.innerHeight - rect.top + 8,
+        left: rect.left + rect.width / 2,
+      })
+    }
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [showEqPanel])
+
+  // Close EQ panel when clicking outside
+  useEffect(() => {
+    if (!showEqPanel) return
+    const handleClick = (e: MouseEvent) => {
+      if (eqPanelRef.current && !eqPanelRef.current.contains(e.target as Node) &&
+          eqButtonRef.current && !eqButtonRef.current.contains(e.target as Node)) {
+        setShowEqPanel(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [showEqPanel])
+
+  const eqHasChanges = eqBass !== 0 || eqMid !== 0 || eqTreble !== 0
 
   if (!currentTrack) {
     return (
@@ -67,10 +246,10 @@ export default function Player() {
           <LyricsPanel />
         </div>
       )}
-      <div className="h-36 border-t border-surface-200/60 dark:border-surface-800/60 bg-white/50 dark:bg-surface-900/50 backdrop-blur-xl flex gap-4 p-3 relative overflow-hidden">
+      <div className="h-36 border-t border-surface-200/60 dark:border-surface-800/60 bg-white/50 dark:bg-surface-900/50 backdrop-blur-xl flex gap-4 p-3 relative">
         {/* Ambient color from artwork */}
         {currentTrack.artworkUrl && (
-          <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute inset-0 pointer-events-none overflow-hidden">
             <img src={currentTrack.artworkUrl} className="absolute inset-0 w-full h-full object-cover blur-[80px] opacity-10 dark:opacity-[0.07] scale-150" alt="" />
           </div>
         )}
@@ -205,6 +384,115 @@ export default function Player() {
               </button>
               <button
                 onClick={speedUp}
+                className="p-1 rounded hover:bg-surface-200/60 dark:hover:bg-surface-800/60 transition-colors text-surface-400 text-[10px]"
+              >
+                +
+              </button>
+            </div>
+
+            {/* EQ control */}
+            <div className="relative">
+              <button
+                ref={eqButtonRef}
+                onClick={handleEqToggle}
+                className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-all flex items-center gap-1 ${
+                  showEqPanel
+                    ? 'bg-cyan-500/25 text-cyan-500'
+                    : eqHasChanges && eqEnabled
+                    ? 'bg-cyan-500/20 text-cyan-500'
+                    : !eqEnabled && eqHasChanges
+                    ? 'bg-surface-500/20 text-surface-400'
+                    : 'hover:bg-surface-200/60 dark:hover:bg-surface-800/60 text-surface-500'
+                }`}
+                title={t('player.eq')}
+              >
+                {/* Mini EQ bars icon */}
+                <svg className="w-3.5 h-3.5" viewBox="0 0 14 14" fill="currentColor">
+                  <rect x="1" y={7 - Math.max(0, eqBass) * 0.4 - 2} width="2.5" rx="0.75" height={4 + Math.abs(eqBass) * 0.4} opacity={eqEnabled ? 1 : 0.35} />
+                  <rect x="5.5" y={7 - Math.max(0, eqMid) * 0.4 - 2} width="2.5" rx="0.75" height={4 + Math.abs(eqMid) * 0.4} opacity={eqEnabled ? 1 : 0.35} />
+                  <rect x="10" y={7 - Math.max(0, eqTreble) * 0.4 - 2} width="2.5" rx="0.75" height={4 + Math.abs(eqTreble) * 0.4} opacity={eqEnabled ? 1 : 0.35} />
+                </svg>
+                {t('player.eq')}
+              </button>
+
+              {showEqPanel && createPortal(
+                <div
+                  ref={eqPanelRef}
+                  className="fixed rounded-2xl shadow-2xl border border-surface-200/60 dark:border-surface-700/50 bg-white/90 dark:bg-surface-850/95 backdrop-blur-2xl overflow-hidden"
+                  style={{ minWidth: 220, bottom: eqPanelPos.bottom, left: eqPanelPos.left, transform: 'translateX(-50%)', zIndex: 9999 }}
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-4 pt-3 pb-1">
+                    <span className="text-[11px] font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider">Equalizer</span>
+                    <button
+                      onClick={toggleEq}
+                      className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide transition-all ${
+                        eqEnabled
+                          ? 'bg-cyan-500 text-white shadow-sm shadow-cyan-500/30'
+                          : 'bg-surface-200 dark:bg-surface-700 text-surface-400'
+                      }`}
+                    >
+                      {eqEnabled ? 'ON' : 'OFF'}
+                    </button>
+                  </div>
+
+                  {/* Slider area */}
+                  <div className="px-4 pt-1 pb-2">
+                    {/* dB scale + sliders */}
+                    <div className="flex gap-0">
+                      {/* dB scale labels */}
+                      <div className="flex flex-col justify-between h-[120px] pr-1.5 pt-[2px] pb-[2px]">
+                        <span className="text-[8px] font-mono text-surface-400 leading-none">+12</span>
+                        <span className="text-[8px] font-mono text-surface-400 leading-none">+6</span>
+                        <span className="text-[8px] font-mono text-surface-300 dark:text-surface-600 leading-none">0</span>
+                        <span className="text-[8px] font-mono text-surface-400 leading-none">-6</span>
+                        <span className="text-[8px] font-mono text-surface-400 leading-none">-12</span>
+                      </div>
+
+                      {/* 3 Band sliders */}
+                      <div className="flex flex-1 justify-around">
+                        <EqBandSlider value={eqBass} onChange={setEqBass} label={t('player.eqBass')} freq="200" enabled={eqEnabled} />
+                        <EqBandSlider value={eqMid} onChange={setEqMid} label={t('player.eqMid')} freq="1k" enabled={eqEnabled} />
+                        <EqBandSlider value={eqTreble} onChange={setEqTreble} label={t('player.eqTreble')} freq="4k" enabled={eqEnabled} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="px-4 pb-3">
+                    <button
+                      onClick={resetEq}
+                      className="w-full py-1 rounded-lg text-[10px] font-medium text-surface-400 hover:text-surface-600 dark:hover:text-surface-300 hover:bg-surface-100/60 dark:hover:bg-surface-700/40 transition-colors"
+                    >
+                      {t('player.eqReset')}
+                    </button>
+                  </div>
+                </div>,
+                document.body
+              )}
+            </div>
+
+            {/* Pitch control */}
+            <div className="flex items-center gap-0.5">
+              <button
+                onClick={() => setPitchSemitones(pitchSemitones - 1)}
+                className="p-1 rounded hover:bg-surface-200/60 dark:hover:bg-surface-800/60 transition-colors text-surface-400 text-[10px]"
+              >
+                -
+              </button>
+              <button
+                onClick={resetPitch}
+                className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-medium transition-all ${
+                  pitchSemitones !== 0
+                    ? 'bg-violet-500/20 text-violet-500'
+                    : 'text-surface-500 hover:bg-surface-200/60 dark:hover:bg-surface-800/60'
+                }`}
+                title={t('player.pitch')}
+              >
+                {pitchSemitones > 0 ? '+' : ''}{pitchSemitones} st
+              </button>
+              <button
+                onClick={() => setPitchSemitones(pitchSemitones + 1)}
                 className="p-1 rounded hover:bg-surface-200/60 dark:hover:bg-surface-800/60 transition-colors text-surface-400 text-[10px]"
               >
                 +

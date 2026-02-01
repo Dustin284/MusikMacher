@@ -98,6 +98,24 @@ class MusikMacherDB extends Dexie {
       projects: '++id, name, order',
       smartTags: '++id, name, category',
     })
+
+    // v7: Play count tracking
+    this.version(7).stores({
+      tracks: '++id, name, path, category, isHidden, createdAt, rating, playCount',
+      tags: '++id, name, category, isHidden, isFavorite',
+      settings: 'id',
+      audioFiles: 'trackId',
+      importLocations: '++id, path, category',
+      libraries: '++id, name, order',
+      projects: '++id, name, order',
+      smartTags: '++id, name, category',
+    }).upgrade(async tx => {
+      const trackTable = tx.table('tracks')
+      await trackTable.toCollection().modify((track: Record<string, unknown>) => {
+        if (track.playCount === undefined) track.playCount = 0
+        if (track.lastPlayedAt === undefined) track.lastPlayedAt = ''
+      })
+    })
   }
 }
 
@@ -286,4 +304,15 @@ export async function updateSmartTag(id: number, changes: Partial<SmartTag>): Pr
 
 export async function deleteSmartTag(id: number): Promise<void> {
   await db.smartTags.delete(id)
+}
+
+// --- Play Count ---
+export async function incrementPlayCount(trackId: number): Promise<void> {
+  const track = await db.tracks.get(trackId)
+  if (track) {
+    await db.tracks.update(trackId, {
+      playCount: (track.playCount ?? 0) + 1,
+      lastPlayedAt: new Date().toISOString(),
+    })
+  }
 }

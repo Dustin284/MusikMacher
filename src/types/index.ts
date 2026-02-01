@@ -63,6 +63,8 @@ export interface Track {
   lrcLyrics?: string
   premiereUsage?: PremiereUsage[]
   rating?: number // 0-5 star rating
+  playCount?: number
+  lastPlayedAt?: string
 }
 
 // --- Smart Tags ---
@@ -184,6 +186,10 @@ export const DEFAULT_SHORTCUTS: KeyboardShortcut[] = [
   { action: 'speedDown', key: 'Ctrl+ArrowDown' },
   { action: 'speedReset', key: 'Ctrl+0' },
   { action: 'abLoopSet', key: 'B' },
+  { action: 'toggleEq', key: 'E' },
+  { action: 'pitchUp', key: 'Shift+ArrowUp' },
+  { action: 'pitchDown', key: 'Shift+ArrowDown' },
+  { action: 'pitchReset', key: 'Shift+0' },
 ]
 
 export const DEFAULT_VISIBLE_COLUMNS = ['name', 'duration', 'bpm', 'key', 'rating', 'tags', 'comment']

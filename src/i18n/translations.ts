@@ -12,6 +12,7 @@ const de = {
   // Tabs
   'tabs.songs': 'Songs',
   'tabs.effects': 'Effekte',
+  'tabs.statistics': 'Statistiken',
   'tabs.import': 'Import',
   'tabs.premiere': 'Premiere',
   'tabs.settings': 'Einstellungen',
@@ -185,6 +186,13 @@ const de = {
   'player.queueAdd': 'Zur Warteschlange',
   'player.queueClear': 'Warteschlange leeren',
   'player.crossfade': 'Crossfade',
+  'player.eq': 'EQ',
+  'player.eqBass': 'Bass',
+  'player.eqMid': 'Mitten',
+  'player.eqTreble': 'Höhen',
+  'player.eqReset': 'EQ Reset',
+  'player.pitch': 'Pitch',
+  'player.pitchReset': 'Pitch Reset',
 
   // Rating
   'browse.rating': 'Bewertung',
@@ -222,6 +230,10 @@ const de = {
   'shortcut.speedDown': 'Langsamer',
   'shortcut.speedReset': 'Normalgeschwindigkeit',
   'shortcut.abLoopSet': 'A-B Loop setzen',
+  'shortcut.toggleEq': 'EQ ein/aus',
+  'shortcut.pitchUp': 'Pitch hoch',
+  'shortcut.pitchDown': 'Pitch runter',
+  'shortcut.pitchReset': 'Pitch zurücksetzen',
   'shortcut.cue': 'Cue {n}',
   'shortcut.setCue': 'Cue {n} setzen',
 
@@ -255,6 +267,34 @@ const de = {
   'log.title': 'Anwendungs-Logs',
   'log.clear': 'Logs löschen',
   'log.empty': 'Keine Logs vorhanden',
+
+  // Statistics
+  'stats.totalTracks': 'Tracks gesamt',
+  'stats.totalDuration': 'Gesamtdauer',
+  'stats.totalPlays': 'Wiedergaben',
+  'stats.avgRating': 'Bewertung',
+  'stats.mostPlayed': 'Meistgespielt',
+  'stats.premiereUsage': 'Premiere-Nutzung',
+  'stats.bpmDistribution': 'BPM-Verteilung',
+  'stats.keyDistribution': 'Tonart-Verteilung',
+  'stats.ratingDistribution': 'Bewertungen',
+  'stats.tagUsage': 'Tag-Nutzung',
+  'stats.recentlyAdded': 'Zuletzt hinzugefügt',
+  'stats.libraryBreakdown': 'Bibliotheken',
+  'stats.noPlays': 'Noch keine Wiedergaben',
+  'stats.noData': 'Keine Daten',
+  'stats.plays': 'Wiedergaben',
+  'stats.tracks': 'Tracks',
+  'stats.unrated': 'Ohne Bewertung',
+
+  // Settings Export/Import
+  'settings.exportImport': 'Export / Import',
+  'settings.exportImportDesc': 'Einstellungen als JSON-Datei exportieren oder importieren.',
+  'settings.exportBtn': 'Einstellungen exportieren',
+  'settings.importBtn': 'Einstellungen importieren',
+  'settings.exportSuccess': 'Einstellungen exportiert.',
+  'settings.importSuccess': 'Einstellungen importiert.',
+  'settings.importError': 'Ungültige Datei. Bitte eine gültige JSON-Datei wählen.',
 }
 
 const en: typeof de = {
@@ -269,6 +309,7 @@ const en: typeof de = {
   // Tabs
   'tabs.songs': 'Songs',
   'tabs.effects': 'Effects',
+  'tabs.statistics': 'Statistics',
   'tabs.import': 'Import',
   'tabs.premiere': 'Premiere',
   'tabs.settings': 'Settings',
@@ -442,6 +483,13 @@ const en: typeof de = {
   'player.queueAdd': 'Add to queue',
   'player.queueClear': 'Clear queue',
   'player.crossfade': 'Crossfade',
+  'player.eq': 'EQ',
+  'player.eqBass': 'Bass',
+  'player.eqMid': 'Mid',
+  'player.eqTreble': 'Treble',
+  'player.eqReset': 'EQ Reset',
+  'player.pitch': 'Pitch',
+  'player.pitchReset': 'Pitch Reset',
 
   // Rating
   'browse.rating': 'Rating',
@@ -479,6 +527,10 @@ const en: typeof de = {
   'shortcut.speedDown': 'Speed down',
   'shortcut.speedReset': 'Reset speed',
   'shortcut.abLoopSet': 'Set A-B loop',
+  'shortcut.toggleEq': 'Toggle EQ',
+  'shortcut.pitchUp': 'Pitch up',
+  'shortcut.pitchDown': 'Pitch down',
+  'shortcut.pitchReset': 'Reset pitch',
   'shortcut.cue': 'Cue {n}',
   'shortcut.setCue': 'Set cue {n}',
 
@@ -512,6 +564,34 @@ const en: typeof de = {
   'log.title': 'Application Logs',
   'log.clear': 'Clear logs',
   'log.empty': 'No logs available',
+
+  // Statistics
+  'stats.totalTracks': 'Total Tracks',
+  'stats.totalDuration': 'Total Duration',
+  'stats.totalPlays': 'Total Plays',
+  'stats.avgRating': 'Avg. Rating',
+  'stats.mostPlayed': 'Most Played',
+  'stats.premiereUsage': 'Premiere Usage',
+  'stats.bpmDistribution': 'BPM Distribution',
+  'stats.keyDistribution': 'Key Distribution',
+  'stats.ratingDistribution': 'Ratings',
+  'stats.tagUsage': 'Tag Usage',
+  'stats.recentlyAdded': 'Recently Added',
+  'stats.libraryBreakdown': 'Libraries',
+  'stats.noPlays': 'No plays yet',
+  'stats.noData': 'No data',
+  'stats.plays': 'plays',
+  'stats.tracks': 'tracks',
+  'stats.unrated': 'Unrated',
+
+  // Settings Export/Import
+  'settings.exportImport': 'Export / Import',
+  'settings.exportImportDesc': 'Export or import settings as a JSON file.',
+  'settings.exportBtn': 'Export Settings',
+  'settings.importBtn': 'Import Settings',
+  'settings.exportSuccess': 'Settings exported.',
+  'settings.importSuccess': 'Settings imported.',
+  'settings.importError': 'Invalid file. Please select a valid JSON settings file.',
 }
 
 export const translations: Record<string, typeof de> = {
