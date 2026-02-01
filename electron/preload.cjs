@@ -3,9 +3,15 @@ const { contextBridge, ipcRenderer } = require('electron')
 contextBridge.exposeInMainWorld('electronAPI', {
   // Existing
   startDrag: (trackId, fileName) => ipcRenderer.send('start-drag', trackId, fileName),
-  prepareDrag: (fileName, fileData) => ipcRenderer.invoke('prepare-drag', fileName, fileData),
+  prepareDrag: (trackId, fileName) => ipcRenderer.invoke('prepare-drag', trackId, fileName),
   saveFile: (fileName, fileData) => ipcRenderer.invoke('save-file', fileName, fileData),
   isElectron: true,
+
+  // Native drag cleanup
+  onNativeDragEnded: (cb) => {
+    ipcRenderer.removeAllListeners('native-drag-ended')
+    ipcRenderer.on('native-drag-ended', () => cb())
+  },
 
   // Download (YouTube / SoundCloud)
   downloadAudio: (url) => ipcRenderer.invoke('download-audio', url),

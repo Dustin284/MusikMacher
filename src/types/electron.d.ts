@@ -1,6 +1,7 @@
 export interface ElectronAPI {
   startDrag: (trackId: number, fileName: string) => void
-  prepareDrag?: (fileName: string, fileData: ArrayBuffer) => Promise<boolean>
+  prepareDrag?: (trackId: number, fileName: string) => Promise<boolean>
+  onNativeDragEnded?: (cb: () => void) => void
   saveFile: (fileName: string, fileData: ArrayBuffer) => Promise<{ success: boolean; path?: string }>
   isElectron: boolean
 

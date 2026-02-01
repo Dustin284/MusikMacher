@@ -188,13 +188,10 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
     setEditingCommentId(null)
   }
 
-  // Pre-write audio file to temp on mousedown (before drag starts)
-  const handleTrackMouseDown = async (track: Track) => {
+  // Prepare drag file on mousedown (main process copies from disk cache, no data transfer)
+  const handleTrackMouseDown = (track: Track) => {
     if (!window.electronAPI?.prepareDrag) return
-    const blob = await getAudioBlob(track.id!)
-    if (!blob) return
-    const buffer = await blob.arrayBuffer()
-    window.electronAPI.prepareDrag(track.name, buffer)
+    window.electronAPI.prepareDrag(track.id!, track.name)
   }
 
   // Drag start - set dataTransfer for internal drops (tag assignment)
@@ -224,6 +221,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
     document.addEventListener('dragleave', handleDocDragLeave)
     return () => document.removeEventListener('dragleave', handleDocDragLeave)
   }, [])
+
 
   const handleExport = async (track: Track) => {
     if (!window.electronAPI) return

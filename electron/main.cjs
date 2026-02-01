@@ -56,13 +56,18 @@ function createWindow() {
 // Uses persistent directory in AppData so Premiere Pro can always find the files
 const dragDir = path.join(app.getPath('userData'), 'drag')
 
-// Step 1: Pre-write file to drag dir on mousedown (before drag starts)
-ipcMain.handle('prepare-drag', async (_event, fileName, fileData) => {
+// Step 1: Prepare drag file from disk cache (no IPC data transfer)
+ipcMain.handle('prepare-drag', async (_event, trackId, fileName) => {
   try {
     if (!fs.existsSync(dragDir)) fs.mkdirSync(dragDir, { recursive: true })
     const dragPath = path.join(dragDir, fileName)
-    fs.writeFileSync(dragPath, Buffer.from(fileData))
-    return true
+    if (fs.existsSync(dragPath)) return true
+    const cachePath = path.join(audioCacheDir, String(trackId))
+    if (fs.existsSync(cachePath)) {
+      fs.copyFileSync(cachePath, dragPath)
+      return true
+    }
+    return false
   } catch {
     return false
   }
@@ -87,6 +92,10 @@ ipcMain.on('start-drag', (event, trackId, fileName) => {
       file: dragPath,
       icon: iconPath,
     })
+    // startDrag is synchronous — when it returns, the native drag is done.
+    // Send a real Escape keypress through Chromium to cancel the stuck browser drag.
+    event.sender.sendInputEvent({ type: 'keyDown', keyCode: 'Escape' })
+    event.sender.sendInputEvent({ type: 'keyUp', keyCode: 'Escape' })
   }
 })
 
