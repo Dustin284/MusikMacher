@@ -839,7 +839,7 @@ ipcMain.handle('check-github-update', async (_event, repo) => {
     })
     if (!res.ok) return { hasUpdate: false, error: `HTTP ${res.status}` }
     const data = await res.json()
-    const latestVersion = (data.tag_name || '').replace(/^v/, '')
+    const latestVersion = (data.tag_name || '').replace(/^v\.?/, '')
     const currentVersion = app.getVersion()
     if (!latestVersion) return { hasUpdate: false }
     const hasUpdate = latestVersion !== currentVersion && compareVersions(latestVersion, currentVersion) > 0
@@ -862,6 +862,25 @@ function compareVersions(a, b) {
   }
   return 0
 }
+
+// Download update installer and run it
+ipcMain.handle('download-and-install-update', async (_event, assetUrl) => {
+  try {
+    if (!assetUrl) return { success: false, error: 'No URL' }
+    const res = await net.fetch(assetUrl, { headers: { 'User-Agent': 'LorusMusikmacher' } })
+    if (!res.ok) return { success: false, error: `HTTP ${res.status}` }
+    const buffer = Buffer.from(await res.arrayBuffer())
+    const fileName = path.basename(new URL(assetUrl).pathname) || 'update-setup.exe'
+    const tmpPath = path.join(os.tmpdir(), fileName)
+    fs.writeFileSync(tmpPath, buffer)
+    const { shell } = require('electron')
+    shell.openPath(tmpPath)
+    setTimeout(() => app.quit(), 1500)
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
 
 // Open URL in default browser
 ipcMain.handle('open-external', async (_event, url) => {

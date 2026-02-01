@@ -56,5 +56,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // GitHub releases check
   checkGithubUpdate: (repo) => ipcRenderer.invoke('check-github-update', repo),
+  downloadAndInstallUpdate: (assetUrl) => ipcRenderer.invoke('download-and-install-update', assetUrl),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
 })

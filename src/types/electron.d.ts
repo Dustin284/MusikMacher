@@ -65,6 +65,7 @@ export interface ElectronAPI {
     body?: string
     error?: string
   }>
+  downloadAndInstallUpdate?: (assetUrl: string) => Promise<{ success: boolean; error?: string }>
   openExternal?: (url: string) => Promise<void>
 }
 

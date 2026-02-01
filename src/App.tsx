@@ -27,6 +27,64 @@ const libraryIcons: Record<string, string> = {
   star: 'M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z',
 }
 
+function renderMarkdown(md: string) {
+  const lines = md.split('\n')
+  const elements: React.ReactNode[] = []
+  let listItems: React.ReactNode[] = []
+  let key = 0
+
+  const flushList = () => {
+    if (listItems.length > 0) {
+      elements.push(<ul key={key++} className="list-disc list-inside space-y-0.5 my-1.5">{listItems}</ul>)
+      listItems = []
+    }
+  }
+
+  const formatInline = (text: string): React.ReactNode[] => {
+    const parts: React.ReactNode[] = []
+    let i = 0
+    const regex = /(\*\*(.+?)\*\*)|(`(.+?)`)/g
+    let match
+    let last = 0
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > last) parts.push(text.slice(last, match.index))
+      if (match[2]) parts.push(<strong key={`b${i++}`} className="font-semibold">{match[2]}</strong>)
+      else if (match[4]) parts.push(<code key={`c${i++}`} className="px-1 py-0.5 rounded bg-surface-200/60 dark:bg-surface-700/60 text-[12px] font-mono">{match[4]}</code>)
+      last = match.index + match[0].length
+    }
+    if (last < text.length) parts.push(text.slice(last))
+    return parts
+  }
+
+  for (const line of lines) {
+    if (line.startsWith('#### ')) {
+      flushList()
+      elements.push(<h4 key={key++} className="text-[13px] font-semibold mt-3 mb-1">{formatInline(line.slice(5))}</h4>)
+    } else if (line.startsWith('### ')) {
+      flushList()
+      elements.push(<h3 key={key++} className="text-[14px] font-semibold mt-4 mb-1.5">{formatInline(line.slice(4))}</h3>)
+    } else if (line.startsWith('## ')) {
+      flushList()
+      elements.push(<h2 key={key++} className="text-[15px] font-bold mt-4 mb-2 text-surface-800 dark:text-surface-200">{formatInline(line.slice(3))}</h2>)
+    } else if (line.startsWith('# ')) {
+      flushList()
+      elements.push(<h1 key={key++} className="text-[17px] font-bold mt-4 mb-2 text-surface-900 dark:text-surface-100">{formatInline(line.slice(2))}</h1>)
+    } else if (line.startsWith('- ')) {
+      listItems.push(<li key={key++}>{formatInline(line.slice(2))}</li>)
+    } else if (line.startsWith('---')) {
+      flushList()
+      elements.push(<hr key={key++} className="my-3 border-surface-200/60 dark:border-surface-700/60" />)
+    } else if (line.trim() === '') {
+      flushList()
+    } else {
+      flushList()
+      elements.push(<p key={key++} className="my-1">{formatInline(line)}</p>)
+    }
+  }
+  flushList()
+  return elements
+}
+
 export default function App() {
   const settings = useSettingsStore(s => s.settings)
   const loaded = useSettingsStore(s => s.loaded)
@@ -47,9 +105,12 @@ export default function App() {
   const [githubUpdateUrl, setGithubUpdateUrl] = useState<string | null>(null)
   const [githubUpdateVersion, setGithubUpdateVersion] = useState<string | null>(null)
   const [githubChangelog, setGithubChangelog] = useState<string | null>(null)
+  const [githubAssets, setGithubAssets] = useState<{ name: string; url: string; size: number }[]>([])
   const [showChangelog, setShowChangelog] = useState(false)
   const [promptDialog, setPromptDialog] = useState<{ title: string; onSubmit: (v: string) => void } | null>(null)
   const [showShortcuts, setShowShortcuts] = useState(false)
+  const [updateDownloading, setUpdateDownloading] = useState(false)
+  const [updateError, setUpdateError] = useState<string | null>(null)
 
   useEffect(() => {
     // Request persistent storage so IndexedDB data survives between sessions
@@ -90,6 +151,7 @@ export default function App() {
         setUpdateAvailable(true)
         setGithubUpdateUrl(result.downloadUrl)
         setGithubUpdateVersion(result.latestVersion || null)
+        setGithubAssets(result.assets || [])
         if (result.body) {
           setGithubChangelog(result.body)
           setShowChangelog(true)
@@ -332,9 +394,12 @@ export default function App() {
                 </svg>
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto text-[13px] text-surface-700 dark:text-surface-300 whitespace-pre-wrap leading-relaxed">
-              {githubChangelog}
+            <div className="flex-1 overflow-y-auto text-[13px] text-surface-700 dark:text-surface-300 leading-relaxed changelog-content">
+              {renderMarkdown(githubChangelog)}
             </div>
+            {updateError && (
+              <p className="mt-2 text-[12px] text-red-500">{updateError}</p>
+            )}
             <div className="mt-4 flex justify-end gap-2">
               <button
                 onClick={() => setShowChangelog(false)}
@@ -344,10 +409,27 @@ export default function App() {
               </button>
               {githubUpdateUrl && (
                 <button
-                  onClick={() => window.electronAPI?.openExternal?.(githubUpdateUrl)}
-                  className="px-3 py-1.5 text-[12px] rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition-colors"
+                  disabled={updateDownloading}
+                  onClick={async () => {
+                    const exeAsset = githubAssets.find(a => a.name.endsWith('.exe') && !a.name.endsWith('.blockmap'))
+                    if (exeAsset && window.electronAPI?.downloadAndInstallUpdate) {
+                      setUpdateDownloading(true)
+                      setUpdateError(null)
+                      const result = await window.electronAPI.downloadAndInstallUpdate(exeAsset.url)
+                      if (!result.success) {
+                        setUpdateError(result.error || 'Download fehlgeschlagen')
+                        setUpdateDownloading(false)
+                      }
+                    } else {
+                      window.electronAPI?.openExternal?.(githubUpdateUrl)
+                    }
+                  }}
+                  className="px-3 py-1.5 text-[12px] rounded-lg bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-60 transition-colors flex items-center gap-1.5"
                 >
-                  {t('app.updateAvailable')}
+                  {updateDownloading && (
+                    <div className="w-3 h-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                  )}
+                  {updateDownloading ? 'Wird heruntergeladen...' : 'Installieren'}
                 </button>
               )}
             </div>

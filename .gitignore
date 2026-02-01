@@ -32,5 +32,8 @@ npm-debug.log*
 # Claude Code
 .claude/
 
+# Changelog (managed outside git)
+CHANGELOG.md
+
 # Misc
 nul
