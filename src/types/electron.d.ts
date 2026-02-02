@@ -51,6 +51,9 @@ export interface ElectronAPI {
   // Logging
   writeLog?: (level: string, message: string, data?: string) => void
 
+  // Clipboard URL detection
+  onClipboardUrl?: (cb: (data: { url: string; platform: string }) => void) => void
+
   // Auto updates
   onUpdateAvailable?: (cb: () => void) => void
   installUpdate?: () => void

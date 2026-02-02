@@ -46,6 +46,16 @@ export default function Browse({ category, isActive }: BrowseProps) {
     const target = e.target as HTMLElement
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
 
+    // Bare digit keys (1-9) → jump to cue point
+    if (!e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      const digit = e.code?.match(/^Digit([1-9])$/)?.[1] ?? (/^[1-9]$/.test(e.key) ? e.key : null)
+      if (digit) {
+        e.preventDefault()
+        usePlayerStore.getState().jumpToCuePoint(parseInt(digit))
+        return
+      }
+    }
+
     const pressedKey = eventToKey(e)
     if (!pressedKey) return
 
@@ -75,11 +85,9 @@ export default function Browse({ category, isActive }: BrowseProps) {
       case 'pitchDown': store.setPitchSemitones(store.pitchSemitones - 1); break
       case 'pitchReset': store.resetPitch(); break
       default: {
-        // Cue points: cue1-9, setCue1-9
+        // Cue points: cue1-9
         const cueMatch = match.action.match(/^cue(\d)$/)
         if (cueMatch) { store.jumpToCuePoint(parseInt(cueMatch[1])); break }
-        const setCueMatch = match.action.match(/^setCue(\d)$/)
-        if (setCueMatch) { store.setCuePoint(parseInt(setCueMatch[1])); break }
       }
     }
   }, [isActive, settings])

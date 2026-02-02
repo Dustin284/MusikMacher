@@ -111,6 +111,7 @@ export default function App() {
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [updateDownloading, setUpdateDownloading] = useState(false)
   const [updateError, setUpdateError] = useState<string | null>(null)
+  const [pendingDownloadUrl, setPendingDownloadUrl] = useState<string | null>(null)
 
   useEffect(() => {
     // Request persistent storage so IndexedDB data survives between sessions
@@ -133,6 +134,18 @@ export default function App() {
   useEffect(() => {
     if (window.electronAPI?.onUpdateAvailable) {
       window.electronAPI.onUpdateAvailable(() => setUpdateAvailable(true))
+    }
+  }, [])
+
+  // Listen for clipboard URL detection — triggered when user clicks native notification
+  useEffect(() => {
+    if (window.electronAPI?.onClipboardUrl) {
+      window.electronAPI.onClipboardUrl((data) => {
+        setPendingDownloadUrl(data.url)
+        // Switch to Import tab (library count + 1)
+        const libCount = useLibraryStore.getState().libraries.length || 2
+        setSelectedTab(libCount + 1)
+      })
     }
   }, [])
 
@@ -357,7 +370,7 @@ export default function App() {
             <Statistics />
           </TabPanel>
           <TabPanel static className={`h-full ${selectedTab !== libraryTabs.length + 1 ? 'hidden' : ''}`}>
-            <Import />
+            <Import initialDownloadUrl={pendingDownloadUrl ?? undefined} onInitialUrlConsumed={() => setPendingDownloadUrl(null)} />
           </TabPanel>
           <TabPanel static className={`h-full ${selectedTab !== libraryTabs.length + 2 ? 'hidden' : ''}`}>
             <PremiereLoader />

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { Track, CuePoint, QueueItem } from '../types'
 import { getAudioBlob, updateTrack, incrementPlayCount } from '../db/database'
 import { useSettingsStore } from './useSettingsStore'
+import { useTrackStore } from './useTrackStore'
 import { detectBPM, detectKey, computeWaveformPeaks } from '../utils/audioAnalysis'
 
 interface ABLoop {
@@ -308,6 +309,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const updatedTrack = { ...currentTrack, cuePoints }
     set({ currentTrack: updatedTrack })
     updateTrack(currentTrack.id, { cuePoints })
+    // Sync with TrackStore so cue points survive track switches
+    useTrackStore.getState().updateTrackCuePoints(currentTrack.id, cuePoints)
   },
 
   jumpToCuePoint: (slot) => {
@@ -329,6 +332,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const updatedTrack = { ...currentTrack, cuePoints }
     set({ currentTrack: updatedTrack })
     updateTrack(currentTrack.id, { cuePoints })
+    // Sync with TrackStore so cue points survive track switches
+    useTrackStore.getState().updateTrackCuePoints(currentTrack.id, cuePoints)
   },
 
   // Playback speed

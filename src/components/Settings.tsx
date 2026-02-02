@@ -423,6 +423,10 @@ function ShortcutEditor({ shortcuts, recordingAction, setRecordingAction, onUpda
       if (e.shiftKey) parts.push('Shift')
       let key = e.key
       if (key === ' ') key = 'Space'
+      // Normalize Shift+digit: e.key gives '!' instead of '1', use e.code
+      if (e.shiftKey && e.code && /^Digit\d$/.test(e.code)) {
+        key = e.code[5]
+      }
       if (['Control', 'Alt', 'Shift', 'Meta'].includes(key)) return
       parts.push(key)
       const combo = parts.join('+')

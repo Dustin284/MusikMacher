@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, net, Menu } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, protocol, net, Menu, clipboard } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
@@ -888,6 +888,172 @@ ipcMain.handle('open-external', async (_event, url) => {
   await shell.openExternal(url)
 })
 
+// --- Clipboard notification popup (custom BrowserWindow) ---
+let notifWindow = null
+let notifData = { url: '', platform: '' }
+
+async function fetchOembedQuick(url, platform) {
+  try {
+    let oembedUrl
+    if (platform === 'youtube') {
+      oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`
+    } else if (platform === 'spotify') {
+      const cleanUrl = url.replace(/\/intl-[a-z]{2}\//, '/').split('?')[0]
+      oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(cleanUrl)}`
+    } else if (platform === 'soundcloud') {
+      oembedUrl = `https://soundcloud.com/oembed?url=${encodeURIComponent(url)}&format=json`
+    }
+    if (!oembedUrl) return null
+    const fetchPromise = net.fetch(oembedUrl, { headers: { 'User-Agent': GENIUS_UA } })
+    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(), 3000))
+    const res = await Promise.race([fetchPromise, timeoutPromise])
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
+
+function buildNotificationHtml(url, platform, title, thumbnailUrl) {
+  const colors = {
+    youtube: { from: '#ef4444', to: '#dc2626', bg: 'rgba(239,68,68,0.12)', text: '#f87171' },
+    soundcloud: { from: '#f97316', to: '#ea580c', bg: 'rgba(249,115,22,0.12)', text: '#fb923c' },
+    spotify: { from: '#22c55e', to: '#16a34a', bg: 'rgba(34,197,94,0.12)', text: '#4ade80' },
+  }
+  const c = colors[platform] || colors.youtube
+  const platformLabel = platform === 'youtube' ? 'YouTube' : platform === 'soundcloud' ? 'SoundCloud' : 'Spotify'
+  const shortUrl = url.length > 45 ? url.slice(0, 45) + '\u2026' : url
+  const titleText = title || (platformLabel + '-Link erkannt')
+
+  const platformIcons = {
+    youtube: '<svg width="22" height="22" viewBox="0 0 24 24" fill="' + c.from + '"><path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>',
+    soundcloud: '<svg width="22" height="22" viewBox="0 0 24 24" fill="' + c.from + '"><path d="M11.56 8.48v8.02h8.44c2.04 0 2-.98 2-2.18s-.22-3.4-2.44-3.4c-.42 0-.63.05-.63.05S18.72 7.2 15.2 7.2c-1.76 0-3.64.66-3.64 1.28zM10.36 8.42c-.1-.04-.2-.02-.2.08v8h.6V8.9c0-.18-.2-.4-.4-.48zM9.2 9.2c-.08-.06-.2-.04-.2.06v7.24h.6v-7c0-.12-.24-.22-.4-.3zM8 10.04c-.08-.04-.2-.02-.2.08v6.38h.6v-6.2c0-.1-.2-.2-.4-.26z"/></svg>',
+    spotify: '<svg width="22" height="22" viewBox="0 0 24 24" fill="' + c.from + '"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>',
+  }
+
+  const hasThumbnail = !!thumbnailUrl
+  const visual = hasThumbnail
+    ? '<img class="thumb" src="' + escHtml(thumbnailUrl) + '" onerror="this.parentNode.innerHTML=\'<div class=no-thumb>' + platformIcons[platform] + '</div>\'" />'
+    : '<div class="no-thumb">' + (platformIcons[platform] || '') + '</div>'
+
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
+    '*{margin:0;padding:0;box-sizing:border-box}' +
+    'html,body{background:transparent;overflow:hidden;user-select:none}' +
+    'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}' +
+    '.card{margin:6px;background:rgba(22,22,26,0.97);border-radius:14px;border:1px solid rgba(255,255,255,0.08);' +
+    'box-shadow:0 12px 48px rgba(0,0,0,0.55),0 4px 12px rgba(0,0,0,0.3);overflow:hidden;' +
+    'animation:slideIn .4s cubic-bezier(.16,1,.3,1)}' +
+    '@keyframes slideIn{from{transform:translateY(30px) scale(.96);opacity:0}to{transform:translateY(0) scale(1);opacity:1}}' +
+    '.accent{height:3px;background:linear-gradient(90deg,' + c.from + ',' + c.to + ')}' +
+    '.close{position:absolute;top:10px;right:10px;background:rgba(255,255,255,.06);border:none;color:rgba(255,255,255,.35);' +
+    'cursor:pointer;padding:5px;border-radius:7px;display:flex;align-items:center;justify-content:center;transition:all .15s;z-index:2}' +
+    '.close:hover{background:rgba(255,255,255,.12);color:rgba(255,255,255,.7)}' +
+    '.body{display:flex;padding:12px 14px 8px;gap:12px;position:relative}' +
+    '.thumb{width:72px;height:72px;border-radius:10px;object-fit:cover;flex-shrink:0;background:rgba(255,255,255,.04)}' +
+    '.no-thumb{width:52px;height:52px;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + c.bg + '}' +
+    '.info{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:3px;padding-right:24px}' +
+    '.platform{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:' + c.text + '}' +
+    '.title{font-size:13px;font-weight:600;color:rgba(255,255,255,.93);overflow:hidden;text-overflow:ellipsis;' +
+    'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.35}' +
+    '.url{font-size:10px;color:rgba(255,255,255,.28);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+    '.actions{padding:4px 14px 12px}' +
+    '.dl-btn{display:flex;width:100%;align-items:center;justify-content:center;gap:7px;' +
+    'padding:9px 14px;border-radius:10px;border:none;' +
+    'background:linear-gradient(135deg,' + c.from + ',' + c.to + ');' +
+    'color:#fff;font-size:12.5px;font-weight:600;cursor:pointer;transition:all .15s;letter-spacing:.2px}' +
+    '.dl-btn:hover{filter:brightness(1.15);transform:translateY(-1px)}' +
+    '.dl-btn:active{transform:scale(.97)}' +
+    '.progress{height:2px;background:rgba(255,255,255,.04);overflow:hidden}' +
+    '.progress-bar{height:100%;background:' + c.from + ';animation:shrink 20s linear forwards}' +
+    '@keyframes shrink{from{width:100%}to{width:0%}}' +
+    '</style></head><body>' +
+    '<div class="card" style="position:relative">' +
+    '<div class="accent"></div>' +
+    '<button class="close" onclick="console.log(\'__DISMISS\')">' +
+    '<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>' +
+    '</button>' +
+    '<div class="body">' +
+    visual +
+    '<div class="info">' +
+    '<div class="platform">' + escHtml(platformLabel) + '</div>' +
+    '<div class="title">' + escHtml(titleText) + '</div>' +
+    '<div class="url">' + escHtml(shortUrl) + '</div>' +
+    '</div></div>' +
+    '<div class="actions">' +
+    '<button class="dl-btn" onclick="console.log(\'__DOWNLOAD\')">' +
+    '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>' +
+    'Herunterladen</button></div>' +
+    '<div class="progress"><div class="progress-bar"></div></div>' +
+    '</div></body></html>'
+}
+
+function showClipboardNotification(url, platform, title, thumbnailUrl) {
+  if (notifWindow && !notifWindow.isDestroyed()) {
+    notifWindow.close()
+  }
+
+  const { screen } = require('electron')
+  const display = screen.getPrimaryDisplay()
+  const { width, height } = display.workAreaSize
+
+  const notifWidth = 380
+  const notifHeight = thumbnailUrl ? 230 : 200
+  const margin = 12
+
+  notifData = { url, platform }
+
+  notifWindow = new BrowserWindow({
+    width: notifWidth,
+    height: notifHeight,
+    x: width - notifWidth - margin,
+    y: height - notifHeight - margin,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    show: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  })
+
+  notifWindow.webContents.on('console-message', (_event, _level, message) => {
+    if (message === '__DOWNLOAD') {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('clipboard-url', { url: notifData.url, platform: notifData.platform })
+        mainWindow.show()
+        mainWindow.focus()
+      }
+      if (notifWindow && !notifWindow.isDestroyed()) notifWindow.close()
+      notifWindow = null
+    } else if (message === '__DISMISS') {
+      if (notifWindow && !notifWindow.isDestroyed()) notifWindow.close()
+      notifWindow = null
+    }
+  })
+
+  notifWindow.once('ready-to-show', () => {
+    if (notifWindow && !notifWindow.isDestroyed()) notifWindow.showInactive()
+  })
+
+  const html = buildNotificationHtml(url, platform, title, thumbnailUrl)
+  notifWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html))
+
+  // Auto-close after 20s
+  setTimeout(() => {
+    if (notifWindow && !notifWindow.isDestroyed()) {
+      notifWindow.close()
+      notifWindow = null
+    }
+  }, 20000)
+}
+
 app.whenReady().then(() => {
   // Stream audio directly from disk cache — no IPC buffer transfer
   // Manual Range request handling (net.fetch + file:// doesn't support Range)
@@ -945,6 +1111,28 @@ app.whenReady().then(() => {
   if (!isDev) {
     setupAutoUpdater()
   }
+
+  // --- Clipboard watcher: detect YouTube/SoundCloud/Spotify URLs ---
+  let lastClipboardText = ''
+  let lastSentUrl = ''
+  setInterval(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    const text = clipboard.readText().trim()
+    if (!text || text === lastClipboardText) return
+    lastClipboardText = text
+    // Check against known platform patterns
+    let platform = null
+    if (/youtube\.com\/watch|youtu\.be\//i.test(text)) platform = 'youtube'
+    else if (/soundcloud\.com\//i.test(text)) platform = 'soundcloud'
+    else if (/open\.spotify\.com\//i.test(text)) platform = 'spotify'
+    if (platform && text !== lastSentUrl) {
+      lastSentUrl = text
+      // Fetch metadata (title + thumbnail) then show custom notification popup
+      fetchOembedQuick(text, platform).then(meta => {
+        showClipboardNotification(text, platform, meta?.title || null, meta?.thumbnail_url || null)
+      })
+    }
+  }, 1500)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

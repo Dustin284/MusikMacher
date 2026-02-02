@@ -9,7 +9,12 @@ import type { ImportLocation } from '../types'
 import DownloadPanel from './DownloadPanel'
 import { log } from '../utils/logger'
 
-export default function Import() {
+interface ImportProps {
+  initialDownloadUrl?: string
+  onInitialUrlConsumed?: () => void
+}
+
+export default function Import({ initialDownloadUrl, onInitialUrlConsumed }: ImportProps = {}) {
   const importTracks = useTrackStore(s => s.importTracks)
   const { t } = useTranslation()
   const libraries = useLibraryStore(s => s.libraries)
@@ -244,7 +249,7 @@ export default function Import() {
       )}
 
       {/* Download panel (YouTube/SoundCloud) */}
-      <DownloadPanel category={importInto} />
+      <DownloadPanel category={importInto} initialUrl={initialDownloadUrl} onInitialUrlConsumed={onInitialUrlConsumed} />
 
       {/* Log output */}
       <div className="flex-1 min-h-[120px] rounded-xl border border-surface-200/60 dark:border-surface-800/60 bg-surface-950/[0.03] dark:bg-surface-950/30 overflow-auto">

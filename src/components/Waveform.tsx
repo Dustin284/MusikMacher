@@ -183,17 +183,18 @@ export default function Waveform({ peaks, audio, duration, onSeek, cuePoints }: 
       {cuePoints && duration > 0 && cuePoints.map(cue => (
         <div
           key={cue.id}
-          className="absolute top-0 bottom-0 w-[2px] pointer-events-none z-[5]"
+          className="absolute top-0 bottom-0 w-[3px] pointer-events-none z-[5]"
           style={{
             left: `${(cue.position / duration) * 100}%`,
             backgroundColor: cue.color,
-            opacity: 0.8,
+            boxShadow: `0 0 6px ${cue.color}80`,
+            opacity: 0.9,
           }}
           title={cue.label}
         >
           <div
-            className="absolute -top-0.5 -left-1 w-2.5 h-2.5 rounded-sm text-[6px] font-bold flex items-center justify-center text-white"
-            style={{ backgroundColor: cue.color }}
+            className="absolute -top-0.5 -left-[5px] w-[13px] h-[13px] rounded-sm text-[8px] font-bold flex items-center justify-center text-white shadow-sm"
+            style={{ backgroundColor: cue.color, boxShadow: `0 1px 3px ${cue.color}60` }}
           >
             {cue.id <= 9 ? cue.id : ''}
           </div>

@@ -54,6 +54,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateAvailable: (cb) => ipcRenderer.on('update-available', () => cb()),
   installUpdate: () => ipcRenderer.send('install-update'),
 
+  // Clipboard URL detection
+  onClipboardUrl: (cb) => {
+    ipcRenderer.removeAllListeners('clipboard-url')
+    ipcRenderer.on('clipboard-url', (_event, data) => cb(data))
+  },
+
   // GitHub releases check
   checkGithubUpdate: (repo) => ipcRenderer.invoke('check-github-update', repo),
   downloadAndInstallUpdate: (assetUrl) => ipcRenderer.invoke('download-and-install-update', assetUrl),

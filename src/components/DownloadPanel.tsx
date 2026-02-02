@@ -1,10 +1,12 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useTranslation } from '../i18n/useTranslation'
 import { useTrackStore } from '../store/useTrackStore'
 import { log } from '../utils/logger'
 
 interface DownloadPanelProps {
   category: number
+  initialUrl?: string
+  onInitialUrlConsumed?: () => void
 }
 
 type DownloadStatus = 'idle' | 'downloading' | 'installing' | 'success' | 'error'
@@ -16,7 +18,7 @@ function detectPlatform(url: string): 'youtube' | 'soundcloud' | 'spotify' | nul
   return null
 }
 
-export default function DownloadPanel({ category }: DownloadPanelProps) {
+export default function DownloadPanel({ category, initialUrl, onInitialUrlConsumed }: DownloadPanelProps) {
   const { t } = useTranslation()
   const importDownloadedTrack = useTrackStore(s => s.importDownloadedTrack)
 
@@ -25,6 +27,16 @@ export default function DownloadPanel({ category }: DownloadPanelProps) {
   const [progress, setProgress] = useState(0)
   const [phase, setPhase] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+
+  // Accept URL passed from clipboard notification — auto-start download
+  useEffect(() => {
+    if (initialUrl) {
+      setUrl(initialUrl)
+      onInitialUrlConsumed?.()
+      // Auto-start download with the URL directly (state not yet updated)
+      setTimeout(() => handleDownload(initialUrl), 50)
+    }
+  }, [initialUrl])
 
   const isElectron = typeof window !== 'undefined' && !!window.electronAPI
   const platform = useMemo(() => detectPlatform(url), [url])
@@ -40,10 +52,11 @@ export default function DownloadPanel({ category }: DownloadPanelProps) {
     }
   }
 
-  const handleDownload = async () => {
-    if (!url.trim() || !isElectron || !window.electronAPI) return
+  const handleDownload = async (urlOverride?: string) => {
+    const downloadUrl = (urlOverride || url).trim()
+    if (!downloadUrl || !isElectron || !window.electronAPI) return
 
-    const detectedPlatform = detectPlatform(url)
+    const detectedPlatform = detectPlatform(downloadUrl)
     if (!detectedPlatform) return
 
     setStatus('downloading')
@@ -52,7 +65,7 @@ export default function DownloadPanel({ category }: DownloadPanelProps) {
     setErrorMessage('')
 
     try {
-      log('info', 'Starting download', { url, platform: detectedPlatform })
+      log('info', 'Starting download', { url: downloadUrl, platform: detectedPlatform })
 
       const isSpotify = detectedPlatform === 'spotify'
 
@@ -80,10 +93,10 @@ export default function DownloadPanel({ category }: DownloadPanelProps) {
 
       if (isSpotify) {
         if (!window.electronAPI.downloadSpotify) throw new Error('Spotify download not available')
-        result = await window.electronAPI.downloadSpotify(url.trim())
+        result = await window.electronAPI.downloadSpotify(downloadUrl)
       } else {
         if (!window.electronAPI.downloadAudio) throw new Error('Download API not available')
-        result = await window.electronAPI.downloadAudio(url.trim())
+        result = await window.electronAPI.downloadAudio(downloadUrl)
       }
 
       if (result?.success && result.fileData && result.fileName) {
@@ -101,7 +114,7 @@ export default function DownloadPanel({ category }: DownloadPanelProps) {
         setStatus('success')
         setProgress(100)
         setPhase('done')
-        log('info', 'Download completed and imported', { url, fileName: result.fileName, trackId: String(trackId ?? '') })
+        log('info', 'Download completed and imported', { url: downloadUrl, fileName: result.fileName, trackId: String(trackId ?? '') })
 
         // Reset after showing success
         setTimeout(() => {
@@ -117,7 +130,7 @@ export default function DownloadPanel({ category }: DownloadPanelProps) {
       const message = err instanceof Error ? err.message : String(err)
       setStatus('error')
       setErrorMessage(message)
-      log('error', 'Download failed', { url, error: message })
+      log('error', 'Download failed', { url: downloadUrl, error: message })
     }
   }
 
@@ -177,7 +190,7 @@ export default function DownloadPanel({ category }: DownloadPanelProps) {
         </div>
 
         <button
-          onClick={handleDownload}
+          onClick={() => handleDownload()}
           disabled={!url.trim() || !platform || isDownloading}
           className="px-4 py-2 text-[13px] font-medium rounded-lg bg-primary-500 hover:bg-primary-600 text-white shadow-sm shadow-primary-500/20 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
         >

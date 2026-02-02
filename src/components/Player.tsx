@@ -168,6 +168,8 @@ export default function Player() {
   const setPitchSemitones = usePlayerStore(s => s.setPitchSemitones)
   const resetPitch = usePlayerStore(s => s.resetPitch)
   const queue = usePlayerStore(s => s.queue)
+  const setCuePoint = usePlayerStore(s => s.setCuePoint)
+  const deleteCuePoint = usePlayerStore(s => s.deleteCuePoint)
   const settings = useSettingsStore(s => s.settings)
   const { t } = useTranslation()
 
@@ -299,30 +301,6 @@ export default function Player() {
             <span className="text-[11px] font-mono text-surface-500 w-11 shrink-0 tabular-nums">{formatTime(duration)}</span>
           </div>
 
-          {/* Cue point strip */}
-          {cuePoints.length > 0 && (
-            <div className="flex items-center gap-1 h-4">
-              {Array.from({ length: 9 }, (_, i) => i + 1).map(slot => {
-                const cue = cuePoints.find(c => c.id === slot)
-                return (
-                  <button
-                    key={slot}
-                    onClick={() => cue && seek(cue.position)}
-                    className={`w-4 h-4 rounded text-[8px] font-bold flex items-center justify-center transition-all ${
-                      cue
-                        ? 'text-white shadow-sm cursor-pointer hover:scale-110'
-                        : 'text-surface-400 bg-surface-200/50 dark:bg-surface-800/50 cursor-default opacity-30'
-                    }`}
-                    style={cue ? { backgroundColor: cue.color } : undefined}
-                    title={cue ? `${cue.label} (${formatTime(cue.position)})` : `Cue ${slot}`}
-                  >
-                    {slot}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
           {/* Controls */}
           <div className="flex items-center gap-1.5">
             {/* Skip backward */}
@@ -360,6 +338,34 @@ export default function Player() {
                 <path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" />
               </svg>
             </button>
+
+            {/* Cue point buttons */}
+            <div className="flex items-center gap-0.5 ml-1">
+              {Array.from({ length: 9 }, (_, i) => i + 1).map(slot => {
+                const cue = cuePoints.find(c => c.id === slot)
+                const colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#f43f5e']
+                const slotColor = cue?.color || colors[(slot - 1) % colors.length]
+                return (
+                  <button
+                    key={slot}
+                    onClick={() => cue ? seek(cue.position) : setCuePoint(slot)}
+                    onContextMenu={(e) => { e.preventDefault(); if (cue) deleteCuePoint(slot) }}
+                    className={`w-5 h-5 rounded text-[9px] font-bold flex items-center justify-center transition-all cursor-pointer ${
+                      cue
+                        ? 'text-white hover:scale-110 active:scale-95'
+                        : 'border border-dashed hover:border-solid hover:scale-105 active:scale-95'
+                    }`}
+                    style={cue
+                      ? { backgroundColor: slotColor, boxShadow: `0 0 6px ${slotColor}60` }
+                      : { borderColor: `${slotColor}40`, color: `${slotColor}50` }
+                    }
+                    title={cue ? `${cue.label} (${formatTime(cue.position)}) — Rechtsklick: loeschen` : `Cue ${slot} setzen (Klick oder Shift+${slot})`}
+                  >
+                    {slot}
+                  </button>
+                )
+              })}
+            </div>
 
             <div className="flex-1" />
 
