@@ -7,6 +7,13 @@ export interface CuePoint {
   source?: 'manual' | 'auto-drop' | 'auto-build'
 }
 
+// --- Waveform Notes ---
+export interface WaveformNote {
+  id: string
+  time: number      // seconds
+  text: string
+}
+
 // --- Premiere Usage ---
 export interface PremiereUsage {
   projectName: string
@@ -23,6 +30,7 @@ export interface ImportLocation {
   category: number
   subfoldersTag: boolean
   lastSyncAt?: string
+  watchEnabled?: boolean
 }
 
 // --- Libraries ---
@@ -65,6 +73,8 @@ export interface Track {
   rating?: number // 0-5 star rating
   playCount?: number
   lastPlayedAt?: string
+  isFavorite?: boolean
+  notes?: WaveformNote[]
 }
 
 // --- Smart Tags ---
@@ -153,6 +163,9 @@ export interface AppSettings {
 
   // Display
   visibleColumns: string[] // which columns to show in TrackGrid
+
+  // AcoustID
+  acoustidApiKey?: string
 }
 
 export const DEFAULT_SHORTCUTS: KeyboardShortcut[] = [
@@ -181,6 +194,10 @@ export const DEFAULT_SHORTCUTS: KeyboardShortcut[] = [
   { action: 'pitchUp', key: 'Shift+ArrowUp' },
   { action: 'pitchDown', key: 'Shift+ArrowDown' },
   { action: 'pitchReset', key: 'Shift+0' },
+  { action: 'playRandom', key: 'R' },
+  { action: 'toggleFavorite', key: 'F' },
+  { action: 'undo', key: 'Ctrl+Z' },
+  { action: 'redo', key: 'Ctrl+Shift+Z' },
 ]
 
 export const DEFAULT_VISIBLE_COLUMNS = ['name', 'duration', 'bpm', 'key', 'rating', 'tags', 'comment']

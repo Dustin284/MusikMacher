@@ -37,6 +37,17 @@ interface PlayerStore {
   // Pitch
   pitchSemitones: number
 
+  // FX
+  reverbEnabled: boolean
+  reverbMix: number         // 0-1
+  reverbRoomSize: 'small' | 'medium' | 'large'
+  compressorEnabled: boolean
+  compThreshold: number     // -100 to 0
+  compRatio: number         // 1 to 20
+  compAttack: number        // 0 to 1
+  compRelease: number       // 0 to 1
+  compKnee: number          // 0 to 40
+
   play: (track: Track) => void
   pause: () => void
   playPause: () => void
@@ -65,6 +76,18 @@ interface PlayerStore {
   setPitchSemitones: (semitones: number) => void
   resetPitch: () => void
 
+  // FX
+  setReverbEnabled: (enabled: boolean) => void
+  setReverbMix: (mix: number) => void
+  setReverbRoomSize: (size: 'small' | 'medium' | 'large') => void
+  setCompressorEnabled: (enabled: boolean) => void
+  setCompThreshold: (v: number) => void
+  setCompRatio: (v: number) => void
+  setCompAttack: (v: number) => void
+  setCompRelease: (v: number) => void
+  setCompKnee: (v: number) => void
+  resetFx: () => void
+
   // A-B Loop
   toggleABLoop: () => void
   clearABLoop: () => void
@@ -91,6 +114,10 @@ let _bassFilter: BiquadFilterNode | null = null
 let _midFilter: BiquadFilterNode | null = null
 let _trebleFilter: BiquadFilterNode | null = null
 let _gainNode: GainNode | null = null
+let _compressorNode: DynamicsCompressorNode | null = null
+let _convolverNode: ConvolverNode | null = null
+let _reverbGainNode: GainNode | null = null  // wet signal
+let _dryGainNode: GainNode | null = null      // dry signal
 
 function ensureAudioContext(): AudioContext {
   if (!_audioContext || _audioContext.state === 'closed') {
@@ -105,15 +132,19 @@ function ensureAudioContext(): AudioContext {
 function connectAudioGraph(audio: HTMLAudioElement) {
   const ctx = ensureAudioContext()
 
-  // Disconnect old source if exists
   if (_sourceNode) {
     try { _sourceNode.disconnect() } catch { /* already disconnected */ }
-    _sourceNode = null
+    // Reuse existing source node if it belongs to the same audio element
+    // (Web Audio API forbids creating a second MediaElementAudioSourceNode for the same element)
+    if (_sourceNode.mediaElement === audio) {
+      // Just reconnect the chain below
+    } else {
+      _sourceNode = ctx.createMediaElementSource(audio)
+    }
+  } else {
+    _sourceNode = ctx.createMediaElementSource(audio)
   }
 
-  _sourceNode = ctx.createMediaElementSource(audio)
-
-  // Create filters if not yet created (reuse across tracks)
   if (!_bassFilter) {
     _bassFilter = ctx.createBiquadFilter()
     _bassFilter.type = 'lowshelf'
@@ -135,21 +166,61 @@ function connectAudioGraph(audio: HTMLAudioElement) {
     _gainNode.gain.value = 1.0
   }
 
-  // Disconnect existing filter chain connections before reconnecting
+  // Disconnect existing nodes
   try { _bassFilter.disconnect() } catch { /* ok */ }
   try { _midFilter.disconnect() } catch { /* ok */ }
   try { _trebleFilter.disconnect() } catch { /* ok */ }
   try { _gainNode.disconnect() } catch { /* ok */ }
+  if (_compressorNode) try { _compressorNode.disconnect() } catch { /* ok */ }
+  if (_convolverNode) try { _convolverNode.disconnect() } catch { /* ok */ }
+  if (_reverbGainNode) try { _reverbGainNode.disconnect() } catch { /* ok */ }
+  if (_dryGainNode) try { _dryGainNode.disconnect() } catch { /* ok */ }
 
-  // Connect chain: source → bass → mid → treble → gain → destination
+  const state = usePlayerStore.getState()
+
+  // Build chain: source → bass → mid → treble
   _sourceNode.connect(_bassFilter)
   _bassFilter.connect(_midFilter)
   _midFilter.connect(_trebleFilter)
-  _trebleFilter.connect(_gainNode)
+
+  let lastNode: AudioNode = _trebleFilter
+
+  // Compressor (optional)
+  if (state.compressorEnabled) {
+    _compressorNode = ctx.createDynamicsCompressor()
+    _compressorNode.threshold.value = state.compThreshold
+    _compressorNode.ratio.value = state.compRatio
+    _compressorNode.attack.value = state.compAttack
+    _compressorNode.release.value = state.compRelease
+    _compressorNode.knee.value = state.compKnee
+    lastNode.connect(_compressorNode)
+    lastNode = _compressorNode
+  }
+
+  // Reverb (optional, dry/wet split)
+  if (state.reverbEnabled) {
+    _convolverNode = ctx.createConvolver()
+    _convolverNode.buffer = generateImpulseResponse(ctx, state.reverbRoomSize)
+    _reverbGainNode = ctx.createGain()
+    _reverbGainNode.gain.value = state.reverbMix
+    _dryGainNode = ctx.createGain()
+    _dryGainNode.gain.value = 1 - state.reverbMix
+
+    // Dry path
+    lastNode.connect(_dryGainNode)
+    _dryGainNode.connect(_gainNode)
+
+    // Wet path
+    lastNode.connect(_convolverNode)
+    _convolverNode.connect(_reverbGainNode)
+    _reverbGainNode.connect(_gainNode)
+  } else {
+    lastNode.connect(_gainNode)
+  }
+
   _gainNode.connect(ctx.destination)
 
   // Apply current EQ values
-  const state = usePlayerStore.getState()
   if (state.eqEnabled) {
     _bassFilter.gain.value = state.eqBass
     _midFilter.gain.value = state.eqMid
@@ -161,8 +232,35 @@ function connectAudioGraph(audio: HTMLAudioElement) {
   }
 }
 
+function rebuildFxChain() {
+  const { audio } = usePlayerStore.getState()
+  if (!audio || !_sourceNode) return
+  try {
+    // Disconnect everything from source onwards
+    _sourceNode.disconnect()
+    connectAudioGraph(audio)
+  } catch { /* rebuild failed */ }
+}
+
 function applyPlaybackRate(audio: HTMLAudioElement, speed: number, semitones: number) {
   audio.playbackRate = speed * Math.pow(2, semitones / 12)
+}
+
+function generateImpulseResponse(ctx: AudioContext, roomSize: 'small' | 'medium' | 'large'): AudioBuffer {
+  const durations = { small: 0.8, medium: 1.6, large: 3.0 }
+  const decays = { small: 1.5, medium: 2.5, large: 4.0 }
+  const duration = durations[roomSize]
+  const decay = decays[roomSize]
+  const sampleRate = ctx.sampleRate
+  const length = sampleRate * duration
+  const impulse = ctx.createBuffer(2, length, sampleRate)
+  for (let ch = 0; ch < 2; ch++) {
+    const data = impulse.getChannelData(ch)
+    for (let i = 0; i < length; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay)
+    }
+  }
+  return impulse
 }
 
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
@@ -185,6 +283,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   eqTreble: 0,
   eqEnabled: true,
   pitchSemitones: 0,
+  reverbEnabled: false,
+  reverbMix: 0.3,
+  reverbRoomSize: 'medium' as const,
+  compressorEnabled: false,
+  compThreshold: -24,
+  compRatio: 4,
+  compAttack: 0.003,
+  compRelease: 0.25,
+  compKnee: 30,
 
   play: (track) => {
     const { audio: existingAudio, currentTrack, audioBlobUrl } = get()
@@ -405,6 +512,62 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const { audio, playbackSpeed } = get()
     if (audio) applyPlaybackRate(audio, playbackSpeed, 0)
     set({ pitchSemitones: 0 })
+  },
+
+  // FX
+  setReverbEnabled: (enabled) => {
+    set({ reverbEnabled: enabled })
+    rebuildFxChain()
+  },
+  setReverbMix: (mix) => {
+    const clamped = Math.max(0, Math.min(1, mix))
+    set({ reverbMix: clamped })
+    if (_reverbGainNode) _reverbGainNode.gain.value = clamped
+    if (_dryGainNode) _dryGainNode.gain.value = 1 - clamped
+  },
+  setReverbRoomSize: (size) => {
+    set({ reverbRoomSize: size })
+    if (_convolverNode && _audioContext) {
+      _convolverNode.buffer = generateImpulseResponse(_audioContext, size)
+    }
+  },
+  setCompressorEnabled: (enabled) => {
+    set({ compressorEnabled: enabled })
+    rebuildFxChain()
+  },
+  setCompThreshold: (v) => {
+    set({ compThreshold: v })
+    if (_compressorNode) _compressorNode.threshold.value = v
+  },
+  setCompRatio: (v) => {
+    set({ compRatio: v })
+    if (_compressorNode) _compressorNode.ratio.value = v
+  },
+  setCompAttack: (v) => {
+    set({ compAttack: v })
+    if (_compressorNode) _compressorNode.attack.value = v
+  },
+  setCompRelease: (v) => {
+    set({ compRelease: v })
+    if (_compressorNode) _compressorNode.release.value = v
+  },
+  setCompKnee: (v) => {
+    set({ compKnee: v })
+    if (_compressorNode) _compressorNode.knee.value = v
+  },
+  resetFx: () => {
+    set({
+      reverbEnabled: false,
+      reverbMix: 0.3,
+      reverbRoomSize: 'medium' as const,
+      compressorEnabled: false,
+      compThreshold: -24,
+      compRatio: 4,
+      compAttack: 0.003,
+      compRelease: 0.25,
+      compKnee: 30,
+    })
+    rebuildFxChain()
   },
 
   // A-B Loop

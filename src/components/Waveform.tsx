@@ -1,5 +1,6 @@
-import { useRef, useCallback, useEffect } from 'react'
-import type { CuePoint } from '../types'
+import { useRef, useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
+import type { CuePoint, WaveformNote } from '../types'
 
 interface WaveformProps {
   peaks: number[]
@@ -7,9 +8,12 @@ interface WaveformProps {
   duration: number
   onSeek: (position: number) => void
   cuePoints?: CuePoint[]
+  notes?: WaveformNote[]
+  onAddNote?: (time: number) => void
+  onDeleteNote?: (noteId: string) => void
 }
 
-export default function Waveform({ peaks, audio, duration, onSeek, cuePoints }: WaveformProps) {
+export default function Waveform({ peaks, audio, duration, onSeek, cuePoints, notes, onAddNote, onDeleteNote }: WaveformProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const progressRef = useRef<HTMLDivElement>(null)
@@ -17,6 +21,7 @@ export default function Waveform({ peaks, audio, duration, onSeek, cuePoints }: 
   const playheadRef = useRef<HTMLDivElement>(null)
   const hoverRef = useRef<HTMLDivElement>(null)
   const rafRef = useRef<number | null>(null)
+  const [hoveredNote, setHoveredNote] = useState<{ note: WaveformNote; x: number; y: number } | null>(null)
 
   const progress = audio && duration > 0 ? audio.currentTime / duration : 0
 
@@ -117,8 +122,13 @@ export default function Waveform({ peaks, audio, duration, onSeek, cuePoints }: 
     if (!containerRef.current || !duration) return
     const rect = containerRef.current.getBoundingClientRect()
     const x = (e.clientX - rect.left) / rect.width
-    onSeek(x * duration)
-  }, [duration, onSeek])
+    const time = x * duration
+    if (e.altKey && onAddNote) {
+      onAddNote(time)
+    } else {
+      onSeek(time)
+    }
+  }, [duration, onSeek, onAddNote])
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!hoverRef.current || !containerRef.current) return
@@ -200,6 +210,53 @@ export default function Waveform({ peaks, audio, duration, onSeek, cuePoints }: 
           </div>
         </div>
       ))}
+
+      {/* Note markers */}
+      {notes && duration > 0 && notes.map(note => (
+        <div
+          key={note.id}
+          className="absolute top-0 bottom-0 w-[2px] pointer-events-auto z-[4] cursor-pointer group/note"
+          style={{
+            left: `${(note.time / duration) * 100}%`,
+            borderLeft: '2px dashed #f59e0b',
+          }}
+          onMouseEnter={(e) => {
+            const rect = containerRef.current?.getBoundingClientRect()
+            if (rect) setHoveredNote({ note, x: e.clientX - rect.left, y: e.clientY - rect.top })
+          }}
+          onMouseLeave={() => setHoveredNote(null)}
+          onContextMenu={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            onDeleteNote?.(note.id)
+          }}
+        >
+          {/* Note icon at top */}
+          <div
+            className="absolute -top-0.5 -left-[7px] w-[16px] h-[16px] rounded-full text-[8px] flex items-center justify-center bg-amber-500 text-white shadow-sm"
+            style={{ boxShadow: '0 1px 3px rgba(245,158,11,0.5)' }}
+          >
+            <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M20 2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h14l4 4V4c0-1.1-.9-2-2-2z"/>
+            </svg>
+          </div>
+        </div>
+      ))}
+
+      {/* Note tooltip — rendered via portal to avoid overflow-hidden clipping */}
+      {hoveredNote && containerRef.current && createPortal(
+        <div
+          className="fixed z-[9999] px-2.5 py-1.5 rounded-lg bg-surface-900/95 text-white text-[11px] max-w-[200px] pointer-events-none shadow-lg"
+          style={{
+            left: containerRef.current.getBoundingClientRect().left + Math.min(hoveredNote.x, containerRef.current.getBoundingClientRect().width - 100),
+            top: containerRef.current.getBoundingClientRect().top - 8,
+            transform: 'translateY(-100%)',
+          }}
+        >
+          {hoveredNote.note.text}
+        </div>,
+        document.body
+      )}
 
       {/* Hover cursor line */}
       <div

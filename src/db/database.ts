@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie'
-import type { Track, Tag, AppSettings, AudioFile, ImportLocation, Library, Project, SmartTag } from '../types'
+import type { Track, Tag, AppSettings, AudioFile, ImportLocation, Library, Project, SmartTag, WaveformNote } from '../types'
 import { DEFAULT_SETTINGS, CATEGORY_TRACKS, CATEGORY_EFFECTS } from '../types'
 
 class MusikMacherDB extends Dexie {
@@ -114,6 +114,24 @@ class MusikMacherDB extends Dexie {
       await trackTable.toCollection().modify((track: Record<string, unknown>) => {
         if (track.playCount === undefined) track.playCount = 0
         if (track.lastPlayedAt === undefined) track.lastPlayedAt = ''
+      })
+    })
+
+    // v8: Favorites + waveform notes
+    this.version(8).stores({
+      tracks: '++id, name, path, category, isHidden, createdAt, rating, playCount, isFavorite',
+      tags: '++id, name, category, isHidden, isFavorite',
+      settings: 'id',
+      audioFiles: 'trackId',
+      importLocations: '++id, path, category',
+      libraries: '++id, name, order',
+      projects: '++id, name, order',
+      smartTags: '++id, name, category',
+    }).upgrade(async tx => {
+      const trackTable = tx.table('tracks')
+      await trackTable.toCollection().modify((track: Record<string, unknown>) => {
+        if (track.isFavorite === undefined) track.isFavorite = false
+        if (track.notes === undefined) track.notes = []
       })
     })
   }
@@ -304,6 +322,17 @@ export async function updateSmartTag(id: number, changes: Partial<SmartTag>): Pr
 
 export async function deleteSmartTag(id: number): Promise<void> {
   await db.smartTags.delete(id)
+}
+
+// --- Favorites ---
+export async function getFavoriteTracks(): Promise<Track[]> {
+  const tracks = await db.tracks.where('isFavorite').equals(1).toArray()
+  for (const track of tracks) {
+    if (track.artworkBlob && track.id != null) {
+      track.artworkUrl = resolveArtworkUrl(track.id, track.artworkBlob)
+    }
+  }
+  return tracks
 }
 
 // --- Play Count ---

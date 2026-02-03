@@ -14,6 +14,7 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 let mainWindow = null
+const activeWatchers = new Map()
 
 function createWindow() {
   Menu.setApplicationMenu(null)
@@ -626,7 +627,7 @@ ipcMain.handle('scan-directory', async (_event, dirPath) => {
         const fullPath = path.join(dir, entry.name)
         if (entry.isDirectory()) {
           scan(fullPath)
-        } else {
+        } else if (fs.existsSync(fullPath)) {
           const ext = path.extname(entry.name).toLowerCase()
           if (audioExts.includes(ext)) {
             files.push(fullPath)
@@ -640,6 +641,42 @@ ipcMain.handle('scan-directory', async (_event, dirPath) => {
   } catch {
     return []
   }
+})
+
+// --- Folder watching ---
+ipcMain.handle('start-watching', async (_event, watchId, dirPath) => {
+  try {
+    if (activeWatchers.has(watchId)) return true
+    if (!fs.existsSync(dirPath)) return false
+    const audioExts = ['.mp3', '.m4a', '.mp4', '.wav', '.ogg', '.flac', '.webm']
+    const watcher = fs.watch(dirPath, { recursive: true }, (eventType, filename) => {
+      if (!filename) return
+      const ext = path.extname(filename).toLowerCase()
+      if (!audioExts.includes(ext)) return
+      const fullPath = path.join(dirPath, filename)
+      if (eventType === 'rename' && fs.existsSync(fullPath)) {
+        // Small delay to ensure file is fully written
+        setTimeout(() => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('file-detected', { path: fullPath, name: path.basename(fullPath), watchId })
+          }
+        }, 500)
+      }
+    })
+    activeWatchers.set(watchId, watcher)
+    return true
+  } catch {
+    return false
+  }
+})
+
+ipcMain.handle('stop-watching', async (_event, watchId) => {
+  const watcher = activeWatchers.get(watchId)
+  if (watcher) {
+    watcher.close()
+    activeWatchers.delete(watchId)
+  }
+  return true
 })
 
 // --- Genius lyrics scraping (avoids CORS) ---
@@ -777,6 +814,92 @@ ipcMain.handle('read-file', async (_event, filePath) => {
   try {
     const buffer = fs.readFileSync(filePath)
     return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
+  } catch {
+    return null
+  }
+})
+
+// --- Audio Fingerprinting (AcoustID via fpcalc) ---
+function getFpcalcPath() {
+  return path.join(getBinDir(), process.platform === 'win32' ? 'fpcalc.exe' : 'fpcalc')
+}
+
+ipcMain.handle('install-fpcalc', async () => {
+  try {
+    const fpcalcPath = getFpcalcPath()
+    if (fs.existsSync(fpcalcPath)) return true
+    const binDir = getBinDir()
+    if (!fs.existsSync(binDir)) fs.mkdirSync(binDir, { recursive: true })
+    // Download Chromaprint fpcalc binary
+    const isWin = process.platform === 'win32'
+    const chromaprintUrl = isWin
+      ? 'https://github.com/acoustid/chromaprint/releases/download/v1.5.1/chromaprint-fpcalc-1.5.1-windows-x86_64.zip'
+      : 'https://github.com/acoustid/chromaprint/releases/download/v1.5.1/chromaprint-fpcalc-1.5.1-linux-x86_64.tar.gz'
+    const tempDir = path.join(app.getPath('temp'), 'fpcalc-install')
+    if (fs.existsSync(tempDir)) fs.rmSync(tempDir, { recursive: true, force: true })
+    fs.mkdirSync(tempDir, { recursive: true })
+    try {
+      const archivePath = path.join(tempDir, isWin ? 'fpcalc.zip' : 'fpcalc.tar.gz')
+      const ok = await downloadToFile(chromaprintUrl, archivePath)
+      if (!ok) return false
+      if (isWin) {
+        execSync(`powershell -Command "Expand-Archive -Path '${archivePath}' -DestinationPath '${tempDir}' -Force"`, { timeout: 60000 })
+      } else {
+        execSync(`tar -xf "${archivePath}" -C "${tempDir}"`, { timeout: 60000 })
+      }
+      const fpcalcName = isWin ? 'fpcalc.exe' : 'fpcalc'
+      const found = findFileInDir(tempDir, fpcalcName)
+      if (found) {
+        fs.copyFileSync(found, fpcalcPath)
+        if (!isWin) fs.chmodSync(fpcalcPath, '755')
+      }
+    } finally {
+      try { fs.rmSync(tempDir, { recursive: true, force: true }) } catch {}
+    }
+    return fs.existsSync(fpcalcPath)
+  } catch {
+    return false
+  }
+})
+
+ipcMain.handle('generate-fingerprint', async (_event, trackId) => {
+  try {
+    const fpcalcPath = getFpcalcPath()
+    if (!fs.existsSync(fpcalcPath)) return null
+    const audioPath = path.join(audioCacheDir, String(trackId))
+    if (!fs.existsSync(audioPath)) return null
+    return new Promise((resolve) => {
+      const proc = spawn(fpcalcPath, ['-json', audioPath])
+      let output = ''
+      proc.stdout.on('data', (data) => { output += data.toString() })
+      proc.on('close', (code) => {
+        if (code !== 0) { resolve(null); return }
+        try {
+          const result = JSON.parse(output)
+          resolve({ fingerprint: result.fingerprint, duration: Math.round(result.duration) })
+        } catch { resolve(null) }
+      })
+      proc.on('error', () => resolve(null))
+    })
+  } catch {
+    return null
+  }
+})
+
+ipcMain.handle('acoustid-lookup', async (_event, fingerprint, duration, apiKey) => {
+  try {
+    const url = `https://api.acoustid.org/v2/lookup?client=${encodeURIComponent(apiKey)}&meta=recordings+releasegroups&fingerprint=${encodeURIComponent(fingerprint)}&duration=${duration}`
+    const res = await net.fetch(url, { headers: { 'User-Agent': 'LorusMusikmacher/1.0' } })
+    if (!res.ok) return null
+    const data = await res.json()
+    const results = data.results || []
+    if (results.length === 0) return null
+    const best = results[0]
+    if (!best.recordings || best.recordings.length === 0) return null
+    const recording = best.recordings[0]
+    const title = recording.title || null
+    const artist = recording.artists?.[0]?.name || null
+    return { title, artist, score: best.score }
   } catch {
     return null
   }
@@ -1054,6 +1177,8 @@ function showClipboardNotification(url, platform, title, thumbnailUrl) {
   }, 20000)
 }
 
+app.setAppUserModelId('com.lorus.musikmacher')
+
 app.whenReady().then(() => {
   // Stream audio directly from disk cache — no IPC buffer transfer
   // Manual Range request handling (net.fetch + file:// doesn't support Range)
@@ -1149,6 +1274,12 @@ app.on('window-all-closed', () => {
 
 // Clean up temp files on quit
 app.on('will-quit', () => {
+  // Close all file watchers
+  for (const [, watcher] of activeWatchers) {
+    try { watcher.close() } catch {}
+  }
+  activeWatchers.clear()
+
   try {
     const tempDir = path.join(os.tmpdir(), 'lorus-musik-macher')
     if (fs.existsSync(tempDir)) {

@@ -2,6 +2,7 @@ import { memo, useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { usePlayerStore } from '../store/usePlayerStore'
 import { useSettingsStore } from '../store/useSettingsStore'
+import { useTrackStore } from '../store/useTrackStore'
 import { useTranslation } from '../i18n/useTranslation'
 import { formatTime } from '../utils/formatTime'
 import Waveform from './Waveform'
@@ -172,11 +173,39 @@ export default function Player() {
   const deleteCuePoint = usePlayerStore(s => s.deleteCuePoint)
   const settings = useSettingsStore(s => s.settings)
   const { t } = useTranslation()
+  const addTrackNote = useTrackStore(s => s.addTrackNote)
+  const deleteTrackNote = useTrackStore(s => s.deleteTrackNote)
+  // FX state
+  const reverbEnabled = usePlayerStore(s => s.reverbEnabled)
+  const reverbMix = usePlayerStore(s => s.reverbMix)
+  const reverbRoomSize = usePlayerStore(s => s.reverbRoomSize)
+  const compressorEnabled = usePlayerStore(s => s.compressorEnabled)
+  const compThreshold = usePlayerStore(s => s.compThreshold)
+  const compRatio = usePlayerStore(s => s.compRatio)
+  const compAttack = usePlayerStore(s => s.compAttack)
+  const compRelease = usePlayerStore(s => s.compRelease)
+  const compKnee = usePlayerStore(s => s.compKnee)
+  const setReverbEnabled = usePlayerStore(s => s.setReverbEnabled)
+  const setReverbMix = usePlayerStore(s => s.setReverbMix)
+  const setReverbRoomSize = usePlayerStore(s => s.setReverbRoomSize)
+  const setCompressorEnabled = usePlayerStore(s => s.setCompressorEnabled)
+  const setCompThreshold = usePlayerStore(s => s.setCompThreshold)
+  const setCompRatio = usePlayerStore(s => s.setCompRatio)
+  const setCompAttack = usePlayerStore(s => s.setCompAttack)
+  const setCompRelease = usePlayerStore(s => s.setCompRelease)
+  const setCompKnee = usePlayerStore(s => s.setCompKnee)
+  const resetFx = usePlayerStore(s => s.resetFx)
 
   const [showEqPanel, setShowEqPanel] = useState(false)
   const [eqPanelPos, setEqPanelPos] = useState({ bottom: 0, left: 0 })
   const eqPanelRef = useRef<HTMLDivElement>(null)
   const eqButtonRef = useRef<HTMLButtonElement>(null)
+  const [noteInput, setNoteInput] = useState<{ time: number; x: number } | null>(null)
+  const [noteText, setNoteText] = useState('')
+  const [showFxPanel, setShowFxPanel] = useState(false)
+  const [fxPanelPos, setFxPanelPos] = useState({ bottom: 0, left: 0 })
+  const fxPanelRef = useRef<HTMLDivElement>(null)
+  const fxButtonRef = useRef<HTMLButtonElement>(null)
 
   // Compute EQ panel position from button ref
   const handleEqToggle = useCallback(() => {
@@ -218,6 +247,64 @@ export default function Player() {
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [showEqPanel])
+
+  const handleAddNote = useCallback((time: number) => {
+    if (!currentTrack?.id) return
+    // Calculate approximate x position from time
+    setNoteInput({ time, x: 0 })
+    setNoteText('')
+  }, [currentTrack])
+
+  const handleSaveNote = useCallback(() => {
+    if (!currentTrack?.id || !noteInput || !noteText.trim()) {
+      setNoteInput(null)
+      return
+    }
+    addTrackNote(currentTrack.id, noteInput.time, noteText.trim())
+    // Sync updated notes from track store into player store's currentTrack
+    const updated = useTrackStore.getState().tracks.find(t => t.id === currentTrack.id)
+    if (updated) {
+      usePlayerStore.setState({ currentTrack: { ...currentTrack, notes: updated.notes } })
+    }
+    setNoteInput(null)
+    setNoteText('')
+  }, [currentTrack, noteInput, noteText, addTrackNote])
+
+  const handleDeleteNote = useCallback((noteId: string) => {
+    if (!currentTrack?.id) return
+    deleteTrackNote(currentTrack.id, noteId)
+    // Sync updated notes from track store into player store's currentTrack
+    const updated = useTrackStore.getState().tracks.find(t => t.id === currentTrack.id)
+    if (updated) {
+      usePlayerStore.setState({ currentTrack: { ...currentTrack, notes: updated.notes } })
+    }
+  }, [currentTrack, deleteTrackNote])
+
+  // FX panel position
+  const handleFxToggle = useCallback(() => {
+    const newShow = !showFxPanel
+    if (newShow && fxButtonRef.current) {
+      const rect = fxButtonRef.current.getBoundingClientRect()
+      setFxPanelPos({
+        bottom: window.innerHeight - rect.top + 8,
+        left: rect.left + rect.width / 2,
+      })
+    }
+    setShowFxPanel(newShow)
+  }, [showFxPanel])
+
+  // Close FX panel on outside click
+  useEffect(() => {
+    if (!showFxPanel) return
+    const handleClick = (e: MouseEvent) => {
+      if (fxPanelRef.current && !fxPanelRef.current.contains(e.target as Node) &&
+          fxButtonRef.current && !fxButtonRef.current.contains(e.target as Node)) {
+        setShowFxPanel(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [showFxPanel])
 
   const eqHasChanges = eqBass !== 0 || eqMid !== 0 || eqTreble !== 0
 
@@ -296,8 +383,25 @@ export default function Player() {
           <div className="flex items-center gap-2.5 flex-1">
             <PositionTime />
             <div className="flex-1 h-14">
-              <Waveform peaks={waveformPeaks} audio={audio} duration={duration} onSeek={seek} cuePoints={cuePoints} />
+              <Waveform peaks={waveformPeaks} audio={audio} duration={duration} onSeek={seek} cuePoints={cuePoints} notes={currentTrack.notes} onAddNote={handleAddNote} onDeleteNote={handleDeleteNote} />
             </div>
+            {noteInput && (
+              <div className="absolute z-20 bottom-full mb-2 left-1/2 -translate-x-1/2">
+                <input
+                  type="text"
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveNote()
+                    if (e.key === 'Escape') setNoteInput(null)
+                  }}
+                  onBlur={handleSaveNote}
+                  autoFocus
+                  placeholder={t('notes.placeholder')}
+                  className="px-2 py-1 text-[12px] rounded-lg border border-amber-500 bg-white dark:bg-surface-800 focus:outline-none shadow-lg w-48"
+                />
+              </div>
+            )}
             <span className="text-[11px] font-mono text-surface-500 w-11 shrink-0 tabular-nums">{formatTime(duration)}</span>
           </div>
 
@@ -478,6 +582,116 @@ export default function Player() {
               )}
             </div>
 
+            {/* FX control */}
+            <div className="relative">
+              <button
+                ref={fxButtonRef}
+                onClick={handleFxToggle}
+                className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-all flex items-center gap-1 ${
+                  showFxPanel
+                    ? 'bg-amber-500/25 text-amber-500'
+                    : (reverbEnabled || compressorEnabled)
+                    ? 'bg-amber-500/20 text-amber-500'
+                    : 'hover:bg-surface-200/60 dark:hover:bg-surface-800/60 text-surface-500'
+                }`}
+                title={t('player.fx')}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                </svg>
+                {t('player.fx')}
+              </button>
+
+              {showFxPanel && createPortal(
+                <div
+                  ref={fxPanelRef}
+                  className="fixed rounded-2xl shadow-2xl border border-surface-200/60 dark:border-surface-700/50 bg-white/90 dark:bg-surface-850/95 backdrop-blur-2xl overflow-hidden"
+                  style={{ minWidth: 280, maxHeight: 400, overflowY: 'auto', bottom: fxPanelPos.bottom, left: fxPanelPos.left, transform: 'translateX(-50%)', zIndex: 9999 }}
+                >
+                  {/* Reverb Section */}
+                  <div className="px-4 pt-3 pb-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider">{t('player.reverb')}</span>
+                      <button
+                        onClick={() => setReverbEnabled(!reverbEnabled)}
+                        className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide transition-all ${
+                          reverbEnabled
+                            ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/30'
+                            : 'bg-surface-200 dark:bg-surface-700 text-surface-400'
+                        }`}
+                      >
+                        {reverbEnabled ? 'ON' : 'OFF'}
+                      </button>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <div>
+                        <div className="flex justify-between mb-1">
+                          <span className="text-[10px] text-surface-500">{t('player.reverbMix')}</span>
+                          <span className="text-[10px] font-mono text-amber-500">{Math.round(reverbMix * 100)}%</span>
+                        </div>
+                        <input type="range" min="0" max="1" step="0.01" value={reverbMix} onChange={(e) => setReverbMix(parseFloat(e.target.value))} className="w-full" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-surface-500 mb-1 block">{t('player.reverbRoom')}</span>
+                        <div className="flex gap-1">
+                          {(['small', 'medium', 'large'] as const).map(size => (
+                            <button
+                              key={size}
+                              onClick={() => setReverbRoomSize(size)}
+                              className={`flex-1 py-1 rounded-md text-[10px] font-medium transition-all ${
+                                reverbRoomSize === size
+                                  ? 'bg-amber-500/20 text-amber-500'
+                                  : 'bg-surface-100 dark:bg-surface-700 text-surface-500 hover:bg-surface-200 dark:hover:bg-surface-600'
+                              }`}
+                            >
+                              {t(`player.room${size.charAt(0).toUpperCase() + size.slice(1)}` as any)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mx-4 border-t border-surface-200/60 dark:border-surface-700/40" />
+
+                  {/* Compressor Section */}
+                  <div className="px-4 pt-2 pb-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider">{t('player.compressor')}</span>
+                      <button
+                        onClick={() => setCompressorEnabled(!compressorEnabled)}
+                        className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide transition-all ${
+                          compressorEnabled
+                            ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/30'
+                            : 'bg-surface-200 dark:bg-surface-700 text-surface-400'
+                        }`}
+                      >
+                        {compressorEnabled ? 'ON' : 'OFF'}
+                      </button>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <FxSlider label={t('player.compThreshold')} value={compThreshold} min={-100} max={0} step={1} format={v => `${v} dB`} onChange={setCompThreshold} />
+                      <FxSlider label={t('player.compRatio')} value={compRatio} min={1} max={20} step={0.5} format={v => `${v}:1`} onChange={setCompRatio} />
+                      <FxSlider label={t('player.compAttack')} value={compAttack} min={0} max={1} step={0.001} format={v => `${(v * 1000).toFixed(0)}ms`} onChange={setCompAttack} />
+                      <FxSlider label={t('player.compRelease')} value={compRelease} min={0} max={1} step={0.01} format={v => `${(v * 1000).toFixed(0)}ms`} onChange={setCompRelease} />
+                      <FxSlider label={t('player.compKnee')} value={compKnee} min={0} max={40} step={1} format={v => `${v} dB`} onChange={setCompKnee} />
+                    </div>
+                  </div>
+
+                  {/* Reset */}
+                  <div className="px-4 pb-3 pt-1">
+                    <button
+                      onClick={resetFx}
+                      className="w-full py-1 rounded-lg text-[10px] font-medium text-surface-400 hover:text-surface-600 dark:hover:text-surface-300 hover:bg-surface-100/60 dark:hover:bg-surface-700/40 transition-colors"
+                    >
+                      {t('player.fxReset')}
+                    </button>
+                  </div>
+                </div>,
+                document.body
+              )}
+            </div>
+
             {/* Pitch control */}
             <div className="flex items-center gap-0.5">
               <button
@@ -583,5 +797,20 @@ export default function Player() {
         </div>
       </div>
     </>
+  )
+}
+
+function FxSlider({ label, value, min, max, step, format, onChange }: {
+  label: string; value: number; min: number; max: number; step: number;
+  format: (v: number) => string; onChange: (v: number) => void
+}) {
+  return (
+    <div>
+      <div className="flex justify-between">
+        <span className="text-[10px] text-surface-500">{label}</span>
+        <span className="text-[10px] font-mono text-amber-500">{format(value)}</span>
+      </div>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(parseFloat(e.target.value))} className="w-full" />
+    </div>
   )
 }

@@ -64,4 +64,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkGithubUpdate: (repo) => ipcRenderer.invoke('check-github-update', repo),
   downloadAndInstallUpdate: (assetUrl) => ipcRenderer.invoke('download-and-install-update', assetUrl),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
+
+  // Folder watching
+  startWatching: (watchId, dirPath) => ipcRenderer.invoke('start-watching', watchId, dirPath),
+  stopWatching: (watchId) => ipcRenderer.invoke('stop-watching', watchId),
+  onFileDetected: (cb) => {
+    ipcRenderer.removeAllListeners('file-detected')
+    ipcRenderer.on('file-detected', (_event, data) => cb(data))
+  },
+  // Audio fingerprinting (AcoustID)
+  installFpcalc: () => ipcRenderer.invoke('install-fpcalc'),
+  generateFingerprint: (trackId) => ipcRenderer.invoke('generate-fingerprint', trackId),
+  acoustidLookup: (fingerprint, duration, apiKey) => ipcRenderer.invoke('acoustid-lookup', fingerprint, duration, apiKey),
 })

@@ -25,6 +25,7 @@ export default function Import({ initialDownloadUrl, onInitialUrlConsumed }: Imp
   const [importing, setImporting] = useState(false)
   const [savedLocations, setSavedLocations] = useState<ImportLocation[]>([])
   const [syncing, setSyncing] = useState<number | null>(null)
+  const [activeWatches, setActiveWatches] = useState<Set<number>>(new Set())
   const fileInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
 
@@ -32,6 +33,54 @@ export default function Import({ initialDownloadUrl, onInitialUrlConsumed }: Imp
   useEffect(() => {
     getImportLocations().then(setSavedLocations)
   }, [])
+
+  // Auto-start watchers for locations with watchEnabled
+  useEffect(() => {
+    if (!window.electronAPI?.startWatching || !window.electronAPI?.onFileDetected) return
+
+    // Register file-detected listener
+    window.electronAPI.onFileDetected(async (data) => {
+      setLog(prev => prev + t('import.fileDetected', { name: data.name }) + '\n')
+      // Auto-import the detected file
+      try {
+        // Look up the correct category from the watched import location
+        const locs = await getImportLocations()
+        const loc = data.watchId ? locs.find(l => String(l.id) === data.watchId) : null
+        const category = loc?.category ?? CATEGORY_TRACKS
+
+        const buffer = await window.electronAPI!.readFile!(data.path)
+        if (!buffer) return
+        const file = new File([buffer], data.name, { lastModified: Date.now() })
+        const dt = new DataTransfer()
+        dt.items.add(file)
+        const result = await importTracks(dt.files, category, loc?.subfoldersTag ?? false)
+        setLog(prev => prev + result)
+      } catch { /* auto-import failed */ }
+    })
+
+    // Start watchers for saved locations
+    const startWatchers = async () => {
+      const locs = await getImportLocations()
+      const newActive = new Set<number>()
+      for (const loc of locs) {
+        if (loc.watchEnabled && loc.id) {
+          const ok = await window.electronAPI!.startWatching!(String(loc.id), loc.path)
+          if (ok) newActive.add(loc.id)
+        }
+      }
+      setActiveWatches(newActive)
+    }
+    startWatchers()
+
+    return () => {
+      // Stop all watchers on unmount
+      if (window.electronAPI?.stopWatching) {
+        for (const id of activeWatches) {
+          window.electronAPI.stopWatching(String(id))
+        }
+      }
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleImportFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return
@@ -120,6 +169,23 @@ export default function Import({ initialDownloadUrl, onInitialUrlConsumed }: Imp
   const handleRemoveLocation = async (id: number) => {
     await deleteImportLocation(id)
     setSavedLocations(prev => prev.filter(l => l.id !== id))
+  }
+
+  const handleToggleWatch = async (loc: ImportLocation) => {
+    if (!loc.id) return
+    const newEnabled = !loc.watchEnabled
+    await updateImportLocation(loc.id, { watchEnabled: newEnabled })
+
+    if (newEnabled && window.electronAPI?.startWatching) {
+      const ok = await window.electronAPI.startWatching(String(loc.id), loc.path)
+      if (ok) setActiveWatches(prev => new Set([...prev, loc.id!]))
+    } else if (!newEnabled && window.electronAPI?.stopWatching) {
+      await window.electronAPI.stopWatching(String(loc.id))
+      setActiveWatches(prev => { const next = new Set(prev); next.delete(loc.id!); return next })
+    }
+
+    const locations = await getImportLocations()
+    setSavedLocations(locations)
   }
 
   const categories = libraries.map(lib => ({
@@ -224,9 +290,23 @@ export default function Import({ initialDownloadUrl, onInitialUrlConsumed }: Imp
                 <span className="flex-1 truncate text-surface-700 dark:text-surface-300" title={loc.path}>{loc.path}</span>
                 {loc.lastSyncAt && (
                   <span className="text-[10px] text-surface-400 shrink-0">
-                    {t('import.lastSync')}: {new Date(loc.lastSyncAt).toLocaleDateString()}
+                    {t('import.lastSync')}: {new Date(loc.lastSyncAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                   </span>
                 )}
+                <button
+                  onClick={() => handleToggleWatch(loc)}
+                  className={`p-1 rounded-md transition-colors ${
+                    loc.watchEnabled
+                      ? 'text-green-500 bg-green-500/10 hover:bg-green-500/20'
+                      : 'text-surface-400 hover:text-surface-600 hover:bg-surface-200/60 dark:hover:bg-surface-700/40'
+                  }`}
+                  title={loc.watchEnabled ? t('import.watching') : t('import.watch')}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                </button>
                 <button
                   onClick={() => handleSyncLocation(loc)}
                   disabled={syncing === loc.id}

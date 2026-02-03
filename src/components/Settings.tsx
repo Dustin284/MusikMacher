@@ -25,6 +25,10 @@ const SHORTCUT_ACTIONS: { action: string; labelKey: string }[] = [
   { action: 'pitchDown', labelKey: 'shortcut.pitchDown' },
   { action: 'pitchReset', labelKey: 'shortcut.pitchReset' },
   { action: 'search', labelKey: 'shortcut.search' },
+  { action: 'playRandom', labelKey: 'shortcut.playRandom' },
+  { action: 'toggleFavorite', labelKey: 'shortcut.toggleFavorite' },
+  { action: 'undo', labelKey: 'shortcut.undo' },
+  { action: 'redo', labelKey: 'shortcut.redo' },
 ]
 for (let i = 1; i <= 9; i++) {
   SHORTCUT_ACTIONS.push({ action: `cue${i}`, labelKey: `shortcut.cue` })
@@ -160,13 +164,26 @@ export default function Settings() {
               format={(v) => v === 0 ? t('settings.crossfadeOff') : `${(v ?? 0).toFixed(1)}s`}
               onChange={(v) => update({ crossfadeDuration: v })}
             />
+            <div>
+              <label className="text-[13px] text-surface-600 dark:text-surface-400 mb-1.5 block">{t('settings.acoustidApiKey')}</label>
+              <input
+                type="text"
+                value={settings.acoustidApiKey || ''}
+                onChange={(e) => update({ acoustidApiKey: e.target.value })}
+                placeholder="AcoustID API Key"
+                className="w-full px-3 py-2 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all font-mono"
+              />
+            </div>
           </div>
         </Section>
 
         {/* Keyboard Shortcuts */}
         <Section title={t('settings.shortcuts')} icon="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707">
           <ShortcutEditor
-            shortcuts={settings.customShortcuts?.length > 0 ? settings.customShortcuts : DEFAULT_SHORTCUTS}
+            shortcuts={(() => {
+              const base = settings.customShortcuts?.length > 0 ? settings.customShortcuts : DEFAULT_SHORTCUTS
+              return [...base, ...DEFAULT_SHORTCUTS.filter(d => !base.some(s => s.action === d.action))]
+            })()}
             recordingAction={recordingAction}
             setRecordingAction={setRecordingAction}
             onUpdate={(shortcuts) => update({ customShortcuts: shortcuts })}

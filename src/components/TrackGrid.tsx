@@ -4,7 +4,7 @@ import { usePlayerStore } from '../store/usePlayerStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useTranslation } from '../i18n/useTranslation'
 import { formatTime } from '../utils/formatTime'
-import { getAudioBlob } from '../db/database'
+import { getAudioBlob, getFavoriteTracks, updateTrack as dbUpdateTrack } from '../db/database'
 import { detectBPM, detectKey } from '../utils/audioAnalysis'
 import TagAssignmentPopover from './TagAssignmentPopover'
 import TrackContextMenu from './TrackContextMenu'
@@ -39,6 +39,8 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
   const importTracks = useTrackStore(s => s.importTracks)
   const findDuplicates = useTrackStore(s => s.findDuplicates)
   const settings = useSettingsStore(s => s.settings)
+  const updateSettings = useSettingsStore(s => s.update)
+  const toggleFavorite = useTrackStore(s => s.toggleFavorite)
   const play = usePlayerStore(s => s.play)
   const addToQueue = usePlayerStore(s => s.addToQueue)
   const currentTrackId = usePlayerStore(s => s.currentTrack?.id)
@@ -55,6 +57,9 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
   const [selectedTrackIds, setSelectedTrackIds] = useState<Set<number>>(new Set())
   const batchMode = selectedTrackIds.size > 0
   const [duplicateIds, setDuplicateIds] = useState<Set<number> | null>(null)
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
+  const [showColumnSettings, setShowColumnSettings] = useState(false)
+  const [identifyingTrackId, setIdentifyingTrackId] = useState<number | null>(null)
   const tableRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -66,11 +71,15 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
 
   const tagMap = useMemo(() => new Map(tags.map(t => [t.id!, t])), [tags])
 
+  const visibleColumns = settings.visibleColumns || ['name', 'duration', 'bpm', 'key', 'rating', 'tags', 'comment']
+  const isColVisible = (col: string) => visibleColumns.includes(col)
+
   const filteredTracks = useMemo(() => {
     const activeTags = tags.filter(t => t.isChecked)
     const terms = searchTerm.toLowerCase().split(/\s+/).filter(Boolean)
     return tracks.filter(track => {
       if (!showHidden && track.isHidden) return false
+      if (showFavoritesOnly && !track.isFavorite) return false
       if (terms.length > 0) {
         const nameLC = track.name.toLowerCase()
         const commentLC = track.comment.toLowerCase()
@@ -85,7 +94,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
       }
       return true
     })
-  }, [tracks, tags, searchTerm, showHidden, settings.andTagCombination])
+  }, [tracks, tags, searchTerm, showHidden, showFavoritesOnly, settings.andTagCombination])
 
   const sortedTracks = useMemo(() => {
     const base = duplicateIds ? filteredTracks.filter(t => duplicateIds.has(t.id!)) : filteredTracks
@@ -278,6 +287,25 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
     setSelectedTrackIds(new Set())
   }
 
+  const handleIdentifyTrack = async (track: Track) => {
+    if (!window.electronAPI || !track.id) return
+    setIdentifyingTrackId(track.id)
+    try {
+      const fp = await window.electronAPI.generateFingerprint?.(track.id)
+      if (!fp) { setIdentifyingTrackId(null); return }
+      const apiKey = settings.acoustidApiKey
+      if (!apiKey) { setIdentifyingTrackId(null); return }
+      const result = await window.electronAPI.acoustidLookup?.(fp.fingerprint, fp.duration, apiKey)
+      if (result?.title && result?.artist) {
+        const newName = `${result.artist} - ${result.title}`
+        await dbUpdateTrack(track.id, { name: newName })
+        const { loadTracks: lt } = useTrackStore.getState()
+        lt(category)
+      }
+    } catch { /* identification failed */ }
+    setIdentifyingTrackId(null)
+  }
+
   // Event delegation for tbody clicks
   const handleTbodyClick = useCallback((e: React.MouseEvent<HTMLTableSectionElement>) => {
     const tr = (e.target as HTMLElement).closest('tr[data-index]') as HTMLElement | null
@@ -417,6 +445,8 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
           onAnalyze={handleAnalyze}
           onAddToQueue={(track) => addToQueue(track)}
           onRate={(track, rating) => updateTrackRating(track.id!, rating)}
+          onToggleFavorite={(track) => toggleFavorite(track.id!)}
+          onIdentifyTrack={settings.acoustidApiKey ? handleIdentifyTrack : undefined}
           tags={tags}
           onTagToggle={(trackId, tagId, add) => {
             if (add) addTrackToTag(trackId, tagId)
@@ -487,6 +517,61 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
           <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} />
           {t('browse.hidden')}
         </label>
+        <button
+          onClick={() => setShowFavoritesOnly(!showFavoritesOnly)}
+          className={`p-1.5 rounded-lg transition-all duration-150 active:scale-95 shrink-0 ${
+            showFavoritesOnly ? 'bg-red-500/20 text-red-500' : 'hover:bg-surface-200/80 dark:hover:bg-surface-800/80 text-surface-400'
+          }`}
+          title={t('browse.favorites')}
+        >
+          <svg className="w-4 h-4" fill={showFavoritesOnly ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+          </svg>
+        </button>
+        <div className="relative">
+          <button
+            onClick={() => setShowColumnSettings(!showColumnSettings)}
+            className={`p-1.5 rounded-lg transition-all duration-150 active:scale-95 shrink-0 ${
+              showColumnSettings ? 'bg-primary-500/20 text-primary-500' : 'hover:bg-surface-200/80 dark:hover:bg-surface-800/80 text-surface-400'
+            }`}
+            title={t('browse.columnSettings')}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+          {showColumnSettings && (
+            <div className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-surface-800 rounded-xl shadow-xl ring-1 ring-black/10 dark:ring-white/10 p-3 min-w-[160px]">
+              <div className="text-[10px] font-semibold text-surface-400 uppercase tracking-wider mb-2">{t('browse.columns')}</div>
+              {[
+                { value: 'name', label: t('browse.name') },
+                { value: 'duration', label: t('browse.duration') },
+                { value: 'bpm', label: t('browse.bpm') },
+                { value: 'key', label: t('browse.key') },
+                { value: 'rating', label: t('browse.rating') },
+                { value: 'created', label: t('browse.created') },
+                { value: 'tags', label: t('browse.tags') },
+                { value: 'comment', label: t('browse.comment') },
+              ].map(col => (
+                <label key={col.value} className="flex items-center gap-2 py-1 text-[13px] text-surface-600 dark:text-surface-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.includes(col.value)}
+                    disabled={col.value === 'name'}
+                    onChange={(e) => {
+                      const next = e.target.checked
+                        ? [...visibleColumns, col.value]
+                        : visibleColumns.filter(c => c !== col.value)
+                      updateSettings({ visibleColumns: next })
+                    }}
+                  />
+                  {col.label}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Batch bar or Track count */}
@@ -547,13 +632,13 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
               <tr className="text-surface-500 text-[11px] font-semibold uppercase tracking-wider">
                 <th className="w-9 px-1 py-2" />
                 <SortHeader field="name" className="text-left">{t('browse.name')}</SortHeader>
-                <SortHeader field="length" className="text-right w-20">{t('browse.duration')}</SortHeader>
-                <SortHeader field="bpm" className="text-right w-16">{t('browse.bpm')}</SortHeader>
-                <SortHeader field="musicalKey" className="text-left w-16">{t('browse.key')}</SortHeader>
-                <SortHeader field="rating" className="text-center w-24">{t('browse.rating')}</SortHeader>
-                <SortHeader field="createdAt" className="text-left w-28">{t('browse.created')}</SortHeader>
-                <th className="text-left px-2.5 py-2 w-28">{t('browse.tags')}</th>
-                <SortHeader field="comment" className="text-left w-40">{t('browse.comment')}</SortHeader>
+                {isColVisible('duration') && <SortHeader field="length" className="text-right w-20">{t('browse.duration')}</SortHeader>}
+                {isColVisible('bpm') && <SortHeader field="bpm" className="text-right w-16">{t('browse.bpm')}</SortHeader>}
+                {isColVisible('key') && <SortHeader field="musicalKey" className="text-left w-16">{t('browse.key')}</SortHeader>}
+                {isColVisible('rating') && <SortHeader field="rating" className="text-center w-24">{t('browse.rating')}</SortHeader>}
+                {isColVisible('created') && <SortHeader field="createdAt" className="text-left w-28">{t('browse.created')}</SortHeader>}
+                {isColVisible('tags') && <th className="text-left px-2.5 py-2 w-28">{t('browse.tags')}</th>}
+                {isColVisible('comment') && <SortHeader field="comment" className="text-left w-40">{t('browse.comment')}</SortHeader>}
                 {window.electronAPI && <th className="w-9 px-1 py-2" />}
               </tr>
             </thead>
@@ -610,6 +695,15 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
                             <span className="w-[2px] rounded-full bg-primary-500 eq-bar-3" />
                           </span>
                         )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleFavorite(track.id!) }}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          className="p-0 shrink-0"
+                        >
+                          <svg className={`w-3.5 h-3.5 transition-colors ${track.isFavorite ? 'text-red-500' : 'text-surface-300 dark:text-surface-700 opacity-0 group-hover/row:opacity-100'}`} fill={track.isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                          </svg>
+                        </button>
                         <span className={isCurrent ? 'text-primary-600 dark:text-primary-400 font-semibold' : ''}>
                           {track.name}
                         </span>
@@ -617,21 +711,28 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
                     </td>
 
                     {/* Duration */}
+                    {isColVisible('duration') && (
                     <td className="px-2.5 py-1.5 text-right text-surface-500 tabular-nums font-mono text-[12px]">
                       {formatTime(track.length)}
                     </td>
+                    )}
 
                     {/* BPM */}
+                    {isColVisible('bpm') && (
                     <td className="px-2.5 py-1.5 text-right text-surface-500 tabular-nums font-mono text-[12px]">
                       {track.bpm ? Math.round(track.bpm) : <span className="text-surface-300 dark:text-surface-700">&mdash;</span>}
                     </td>
+                    )}
 
                     {/* Key */}
+                    {isColVisible('key') && (
                     <td className="px-2.5 py-1.5 text-surface-500 text-[12px]">
                       {track.musicalKey || <span className="text-surface-300 dark:text-surface-700">&mdash;</span>}
                     </td>
+                    )}
 
                     {/* Rating */}
+                    {isColVisible('rating') && (
                     <td className="px-2.5 py-1.5" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onDragStart={(e) => e.preventDefault()}>
                       <div className="flex items-center justify-center gap-px">
                         {[1, 2, 3, 4, 5].map(star => (
@@ -651,18 +752,24 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
                         ))}
                       </div>
                     </td>
+                    )}
 
                     {/* Created */}
+                    {isColVisible('created') && (
                     <td className="px-2.5 py-1.5 text-surface-500 text-[12px]">
                       {new Date(track.createdAt).toLocaleDateString(dateLocale)}
                     </td>
+                    )}
 
                     {/* Tags */}
+                    {isColVisible('tags') && (
                     <td className="px-2.5 py-1.5" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()} onDragStart={(e) => e.preventDefault()}>
                       <TagAssignmentPopover track={track} tags={tags} tagMap={tagMap} />
                     </td>
+                    )}
 
                     {/* Comment */}
+                    {isColVisible('comment') && (
                     <td className="px-2.5 py-1.5" onMouseDown={(e) => e.stopPropagation()} onDragStart={(e) => e.preventDefault()}>
                       {editingCommentId === track.id ? (
                         <input
@@ -687,6 +794,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
                         </span>
                       )}
                     </td>
+                    )}
 
                     {/* Export */}
                     {window.electronAPI && (

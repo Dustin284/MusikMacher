@@ -70,6 +70,16 @@ export interface ElectronAPI {
   }>
   downloadAndInstallUpdate?: (assetUrl: string) => Promise<{ success: boolean; error?: string }>
   openExternal?: (url: string) => Promise<void>
+
+  // Folder watching
+  startWatching?: (watchId: string, dirPath: string) => Promise<boolean>
+  stopWatching?: (watchId: string) => Promise<boolean>
+  onFileDetected?: (cb: (data: { path: string; name: string; watchId?: string }) => void) => void
+
+  // Audio fingerprinting (AcoustID)
+  installFpcalc?: () => Promise<boolean>
+  generateFingerprint?: (trackId: number) => Promise<{ fingerprint: string; duration: number } | null>
+  acoustidLookup?: (fingerprint: string, duration: number, apiKey: string) => Promise<{ title: string | null; artist: string | null; score: number } | null>
 }
 
 declare global {

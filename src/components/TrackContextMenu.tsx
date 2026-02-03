@@ -16,6 +16,8 @@ interface TrackContextMenuProps {
   onDelete?: (track: Track) => void
   onAddToQueue?: (track: Track) => void
   onRate?: (track: Track, rating: number) => void
+  onToggleFavorite?: (track: Track) => void
+  onIdentifyTrack?: (track: Track) => void
   tags?: Tag[]
   onTagToggle?: (trackId: number, tagId: number, add: boolean) => void
 }
@@ -33,6 +35,8 @@ export default function TrackContextMenu({
   onDelete,
   onAddToQueue,
   onRate,
+  onToggleFavorite,
+  onIdentifyTrack,
   tags,
   onTagToggle,
 }: TrackContextMenuProps) {
@@ -124,6 +128,15 @@ export default function TrackContextMenu({
       hidden: !onAddToQueue,
     },
     {
+      label: track.isFavorite ? t('context.unfavorite') : t('context.favorite'),
+      icon: 'M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z',
+      onClick: () => {
+        onToggleFavorite?.(track)
+        onClose()
+      },
+      hidden: !onToggleFavorite,
+    },
+    {
       label: t('context.editComment'),
       icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z',
       onClick: () => {
@@ -160,6 +173,15 @@ export default function TrackContextMenu({
       },
       separator: true,
       hidden: !onAnalyze,
+    },
+    {
+      label: t('context.identifyTrack'),
+      icon: 'M10 21h7a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v11m0 5l4.879-4.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242z',
+      onClick: () => {
+        onIdentifyTrack?.(track)
+        onClose()
+      },
+      hidden: !onIdentifyTrack,
     },
     {
       label: t('context.delete'),

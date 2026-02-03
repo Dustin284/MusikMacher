@@ -1,7 +1,8 @@
 import { create } from 'zustand'
-import type { Track, Tag, CuePoint } from '../types'
+import type { Track, Tag, CuePoint, WaveformNote } from '../types'
 import { CATEGORY_TRACKS } from '../types'
 import { db, getTracks, getTags, addTag, updateTag, deleteTag, updateTrack, addTrack, storeAudioBlob, deleteTrack as dbDeleteTrack, getAudioBlob } from '../db/database'
+import { useUndoStore } from './useUndoStore'
 
 interface TrackStore {
   tracks: Track[]
@@ -40,6 +41,10 @@ interface TrackStore {
   updateTrackCuePoints: (id: number, cuePoints: CuePoint[]) => Promise<void>
   updateTrackLyrics: (id: number, lyrics: string, lrcLyrics?: string) => Promise<void>
   updateTrackRating: (id: number, rating: number) => Promise<void>
+  toggleFavorite: (id: number) => Promise<void>
+  addTrackNote: (trackId: number, time: number, text: string) => Promise<void>
+  updateTrackNote: (trackId: number, noteId: string, text: string) => Promise<void>
+  deleteTrackNote: (trackId: number, noteId: string) => Promise<void>
 
   importTracks: (files: FileList, category: number, subfoldersTag: boolean) => Promise<string>
   importDownloadedTrack: (fileData: ArrayBuffer, fileName: string, filePath: string, category: number) => Promise<{ trackId: number | null; log: string }>
@@ -146,6 +151,7 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
     const track = tracks.find(t => t.id === trackId)
     if (!track || track.tagIds.includes(tagId)) return
     const newTagIds = [...track.tagIds, tagId]
+    useUndoStore.getState().pushAction({ type: 'addTag', trackId, previousValue: [...track.tagIds], newValue: newTagIds })
     set({ tracks: tracks.map(t => t.id === trackId ? { ...t, tagIds: newTagIds } : t) })
     await updateTrack(trackId, { tagIds: newTagIds })
   },
@@ -155,42 +161,64 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
     const track = tracks.find(t => t.id === trackId)
     if (!track) return
     const newTagIds = track.tagIds.filter(id => id !== tagId)
+    useUndoStore.getState().pushAction({ type: 'removeTag', trackId, previousValue: [...track.tagIds], newValue: newTagIds })
     set({ tracks: tracks.map(t => t.id === trackId ? { ...t, tagIds: newTagIds } : t) })
     await updateTrack(trackId, { tagIds: newTagIds })
   },
 
   hideTrack: async (id) => {
     const { tracks } = get()
+    useUndoStore.getState().pushAction({ type: 'hideTrack', trackId: id, previousValue: false, newValue: true })
     set({ tracks: tracks.map(t => t.id === id ? { ...t, isHidden: true } : t) })
     updateTrack(id, { isHidden: true })
   },
 
   unhideTrack: async (id) => {
     const { tracks } = get()
+    useUndoStore.getState().pushAction({ type: 'hideTrack', trackId: id, previousValue: true, newValue: false })
     set({ tracks: tracks.map(t => t.id === id ? { ...t, isHidden: false } : t) })
     updateTrack(id, { isHidden: false })
   },
 
   deleteTrack: async (id) => {
     const { tracks } = get()
+    const track = tracks.find(t => t.id === id)
+    if (track) {
+      // Snapshot track + audio for undo
+      const audioBlob = await getAudioBlob(id).catch(() => undefined)
+      useUndoStore.getState().pushAction({
+        type: 'deleteTrack',
+        trackId: id,
+        previousValue: null,
+        newValue: null,
+        trackSnapshot: { ...track },
+        audioBlob: audioBlob,
+      })
+    }
     set({ tracks: tracks.filter(t => t.id !== id) })
     await dbDeleteTrack(id)
   },
 
   updateTrackComment: async (id, comment) => {
     const { tracks } = get()
+    const prev = tracks.find(t => t.id === id)
+    if (prev) useUndoStore.getState().pushAction({ type: 'updateComment', trackId: id, previousValue: prev.comment, newValue: comment })
     set({ tracks: tracks.map(t => t.id === id ? { ...t, comment } : t) })
     updateTrack(id, { comment })
   },
 
   updateTrackBPM: async (id, bpm) => {
     const { tracks } = get()
+    const prev = tracks.find(t => t.id === id)
+    if (prev) useUndoStore.getState().pushAction({ type: 'updateBPM', trackId: id, previousValue: prev.bpm ?? 0, newValue: bpm })
     set({ tracks: tracks.map(t => t.id === id ? { ...t, bpm } : t) })
     updateTrack(id, { bpm })
   },
 
   updateTrackKey: async (id, key) => {
     const { tracks } = get()
+    const prev = tracks.find(t => t.id === id)
+    if (prev) useUndoStore.getState().pushAction({ type: 'updateKey', trackId: id, previousValue: prev.musicalKey ?? '', newValue: key })
     set({ tracks: tracks.map(t => t.id === id ? { ...t, musicalKey: key } : t) })
     updateTrack(id, { musicalKey: key })
   },
@@ -211,8 +239,48 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
 
   updateTrackRating: async (id, rating) => {
     const { tracks } = get()
+    const prev = tracks.find(t => t.id === id)
+    if (prev) useUndoStore.getState().pushAction({ type: 'updateRating', trackId: id, previousValue: prev.rating ?? 0, newValue: rating })
     set({ tracks: tracks.map(t => t.id === id ? { ...t, rating } : t) })
     updateTrack(id, { rating })
+  },
+
+  toggleFavorite: async (id) => {
+    const { tracks } = get()
+    const track = tracks.find(t => t.id === id)
+    if (!track) return
+    const newFav = !track.isFavorite
+    useUndoStore.getState().pushAction({ type: 'toggleFavorite', trackId: id, previousValue: !!track.isFavorite, newValue: newFav })
+    set({ tracks: tracks.map(t => t.id === id ? { ...t, isFavorite: newFav } : t) })
+    updateTrack(id, { isFavorite: newFav })
+  },
+
+  addTrackNote: async (trackId, time, text) => {
+    const { tracks } = get()
+    const track = tracks.find(t => t.id === trackId)
+    if (!track) return
+    const note: WaveformNote = { id: crypto.randomUUID(), time, text }
+    const notes = [...(track.notes || []), note].sort((a, b) => a.time - b.time)
+    set({ tracks: tracks.map(t => t.id === trackId ? { ...t, notes } : t) })
+    updateTrack(trackId, { notes })
+  },
+
+  updateTrackNote: async (trackId, noteId, text) => {
+    const { tracks } = get()
+    const track = tracks.find(t => t.id === trackId)
+    if (!track) return
+    const notes = (track.notes || []).map(n => n.id === noteId ? { ...n, text } : n)
+    set({ tracks: tracks.map(t => t.id === trackId ? { ...t, notes } : t) })
+    updateTrack(trackId, { notes })
+  },
+
+  deleteTrackNote: async (trackId, noteId) => {
+    const { tracks } = get()
+    const track = tracks.find(t => t.id === trackId)
+    if (!track) return
+    const notes = (track.notes || []).filter(n => n.id !== noteId)
+    set({ tracks: tracks.map(t => t.id === trackId ? { ...t, notes } : t) })
+    updateTrack(trackId, { notes })
   },
 
   importTracks: async (files, category, subfoldersTag) => {
@@ -233,6 +301,19 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
       const existing = await db.tracks.where('name').equals(file.name).first()
       if (existing) {
         log += `Skipped (exists): ${file.name}\n`
+        skipped++
+        continue
+      }
+
+      // Also check normalized name (without extension, case-insensitive) to catch duplicates
+      const normalizedName = file.name.replace(/\.[^.]+$/, '').toLowerCase().trim()
+      const allTracks = get().tracks
+      const similarExists = allTracks.some(t => {
+        const tNorm = t.name.replace(/\.[^.]+$/, '').toLowerCase().trim()
+        return tNorm === normalizedName
+      })
+      if (similarExists) {
+        log += `Skipped (similar): ${file.name}\n`
         skipped++
         continue
       }

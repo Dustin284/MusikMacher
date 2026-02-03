@@ -115,7 +115,7 @@ const de = {
   'import.savedLocations': 'Gespeicherte Orte',
   'import.sync': 'Synchronisieren',
   'import.removeLocation': 'Entfernen',
-  'import.lastSync': 'Letzte Sync: {date}',
+  'import.lastSync': 'Letzte Sync',
 
   // Download
   'download.title': 'Audio herunterladen',
@@ -295,6 +295,66 @@ const de = {
   'settings.exportSuccess': 'Einstellungen exportiert.',
   'settings.importSuccess': 'Einstellungen importiert.',
   'settings.importError': 'Ungültige Datei. Bitte eine gültige JSON-Datei wählen.',
+
+  // Shortcuts - new
+  'shortcut.playRandom': 'Zufälliger Track',
+  'shortcut.toggleFavorite': 'Favorit ein/aus',
+  'shortcut.undo': 'Rückgängig',
+  'shortcut.redo': 'Wiederherstellen',
+
+  // Context - favorites & identify
+  'context.favorite': 'Favorit',
+  'context.unfavorite': 'Kein Favorit',
+  'context.identifyTrack': 'Track identifizieren',
+  'context.identifying': 'Identifiziere...',
+  'context.identified': 'Identifiziert: {name}',
+  'context.notIdentified': 'Nicht identifiziert',
+
+  // Browse - favorites & columns
+  'browse.favorites': 'Favoriten',
+  'browse.columns': 'Spalten',
+  'browse.columnSettings': 'Spalten ein/ausblenden',
+
+  // Import - watching & similar
+  'import.watch': 'Ordner überwachen',
+  'import.watching': 'Überwacht',
+  'import.fileDetected': 'Neue Datei erkannt: {name}',
+  'import.skippedSimilar': 'Übersprungen (ähnlich): {name}',
+  'import.skippedNotReadable': 'Übersprungen (nicht lesbar): {name}',
+
+  // Notes
+  'notes.add': 'Notiz hinzufügen',
+  'notes.edit': 'Notiz bearbeiten',
+  'notes.delete': 'Notiz löschen',
+  'notes.placeholder': 'Notiz eingeben...',
+  'notes.altClick': 'Alt+Klick für Notiz',
+
+  // Player FX
+  'player.fx': 'FX',
+  'player.reverb': 'Reverb',
+  'player.reverbMix': 'Mix',
+  'player.reverbRoom': 'Raum',
+  'player.roomSmall': 'Klein',
+  'player.roomMedium': 'Mittel',
+  'player.roomLarge': 'Groß',
+  'player.compressor': 'Kompressor',
+  'player.compThreshold': 'Threshold',
+  'player.compRatio': 'Ratio',
+  'player.compAttack': 'Attack',
+  'player.compRelease': 'Release',
+  'player.compKnee': 'Knee',
+  'player.fxReset': 'FX Reset',
+
+  // Undo
+  'undo.undone': 'Rückgängig gemacht',
+  'undo.redone': 'Wiederhergestellt',
+  'undo.deleteTrack': 'Track gelöscht',
+  'undo.ratingChange': 'Bewertung geändert',
+  'undo.commentEdit': 'Kommentar geändert',
+  'undo.hideTrack': 'Track ausgeblendet',
+
+  // Settings - AcoustID
+  'settings.acoustidApiKey': 'AcoustID API Key',
 }
 
 const en: typeof de = {
@@ -412,7 +472,7 @@ const en: typeof de = {
   'import.savedLocations': 'Saved locations',
   'import.sync': 'Sync',
   'import.removeLocation': 'Remove',
-  'import.lastSync': 'Last sync: {date}',
+  'import.lastSync': 'Last sync',
 
   // Download
   'download.title': 'Download audio',
@@ -592,6 +652,66 @@ const en: typeof de = {
   'settings.exportSuccess': 'Settings exported.',
   'settings.importSuccess': 'Settings imported.',
   'settings.importError': 'Invalid file. Please select a valid JSON settings file.',
+
+  // Shortcuts - new
+  'shortcut.playRandom': 'Random track',
+  'shortcut.toggleFavorite': 'Toggle favorite',
+  'shortcut.undo': 'Undo',
+  'shortcut.redo': 'Redo',
+
+  // Context - favorites & identify
+  'context.favorite': 'Favorite',
+  'context.unfavorite': 'Unfavorite',
+  'context.identifyTrack': 'Identify track',
+  'context.identifying': 'Identifying...',
+  'context.identified': 'Identified: {name}',
+  'context.notIdentified': 'Not identified',
+
+  // Browse - favorites & columns
+  'browse.favorites': 'Favorites',
+  'browse.columns': 'Columns',
+  'browse.columnSettings': 'Show/hide columns',
+
+  // Import - watching & similar
+  'import.watch': 'Watch folder',
+  'import.watching': 'Watching',
+  'import.fileDetected': 'New file detected: {name}',
+  'import.skippedSimilar': 'Skipped (similar): {name}',
+  'import.skippedNotReadable': 'Skipped (not readable): {name}',
+
+  // Notes
+  'notes.add': 'Add note',
+  'notes.edit': 'Edit note',
+  'notes.delete': 'Delete note',
+  'notes.placeholder': 'Enter note...',
+  'notes.altClick': 'Alt+Click for note',
+
+  // Player FX
+  'player.fx': 'FX',
+  'player.reverb': 'Reverb',
+  'player.reverbMix': 'Mix',
+  'player.reverbRoom': 'Room',
+  'player.roomSmall': 'Small',
+  'player.roomMedium': 'Medium',
+  'player.roomLarge': 'Large',
+  'player.compressor': 'Compressor',
+  'player.compThreshold': 'Threshold',
+  'player.compRatio': 'Ratio',
+  'player.compAttack': 'Attack',
+  'player.compRelease': 'Release',
+  'player.compKnee': 'Knee',
+  'player.fxReset': 'FX Reset',
+
+  // Undo
+  'undo.undone': 'Undone',
+  'undo.redone': 'Redone',
+  'undo.deleteTrack': 'Track deleted',
+  'undo.ratingChange': 'Rating changed',
+  'undo.commentEdit': 'Comment changed',
+  'undo.hideTrack': 'Track hidden',
+
+  // Settings - AcoustID
+  'settings.acoustidApiKey': 'AcoustID API Key',
 }
 
 export const translations: Record<string, typeof de> = {

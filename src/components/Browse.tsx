@@ -1,8 +1,9 @@
-import { useEffect, useCallback } from 'react'
+import { useEffect, useCallback, useState } from 'react'
 import { useTrackStore } from '../store/useTrackStore'
 import { usePlayerStore } from '../store/usePlayerStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { DEFAULT_SHORTCUTS } from '../types'
+import { useUndoStore } from '../store/useUndoStore'
 import TagSidebar from './TagSidebar'
 import TrackGrid from './TrackGrid'
 import Player from './Player'
@@ -44,7 +45,10 @@ export default function Browse({ category, isActive }: BrowseProps) {
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (!isActive) return
     const target = e.target as HTMLElement
-    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+    const isInInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+    // Allow Ctrl+Z / Ctrl+Shift+Z through even when in an input (global undo/redo)
+    const isUndoRedo = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z'
+    if (isInInput && !isUndoRedo) return
 
     // Bare digit keys (1-9) → jump to cue point
     if (!e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
@@ -59,9 +63,10 @@ export default function Browse({ category, isActive }: BrowseProps) {
     const pressedKey = eventToKey(e)
     if (!pressedKey) return
 
-    // Build shortcut map: merge defaults with custom overrides
-    const shortcuts = settings.customShortcuts?.length > 0 ? settings.customShortcuts : DEFAULT_SHORTCUTS
-    const match = shortcuts.find(s => s.key === pressedKey)
+    // Build shortcut map: custom overrides + any new defaults that aren't in custom yet
+    const base = settings.customShortcuts?.length > 0 ? settings.customShortcuts : DEFAULT_SHORTCUTS
+    const shortcuts = [...base, ...DEFAULT_SHORTCUTS.filter(d => !base.some(s => s.action === d.action))]
+    const match = shortcuts.find(s => s.key.toLowerCase() === pressedKey.toLowerCase())
     if (!match) return
 
     e.preventDefault()
@@ -84,6 +89,39 @@ export default function Browse({ category, isActive }: BrowseProps) {
       case 'pitchUp': store.setPitchSemitones(store.pitchSemitones + 1); break
       case 'pitchDown': store.setPitchSemitones(store.pitchSemitones - 1); break
       case 'pitchReset': store.resetPitch(); break
+      case 'playRandom': {
+        const trackStore = useTrackStore.getState()
+        const filtered = trackStore.getFilteredTracks(settings.andTagCombination)
+        if (filtered.length > 0) {
+          const randomTrack = filtered[Math.floor(Math.random() * filtered.length)]
+          store.play(randomTrack)
+        }
+        break
+      }
+      case 'toggleFavorite': {
+        const ct = store.currentTrack
+        if (ct?.id) {
+          useTrackStore.getState().toggleFavorite(ct.id)
+        }
+        break
+      }
+      case 'undo': {
+        useUndoStore.getState().undo().then(type => {
+          if (type) {
+            // Reload tracks to reflect undo
+            useTrackStore.getState().loadTracks(category)
+          }
+        })
+        break
+      }
+      case 'redo': {
+        useUndoStore.getState().redo().then(type => {
+          if (type) {
+            useTrackStore.getState().loadTracks(category)
+          }
+        })
+        break
+      }
       default: {
         // Cue points: cue1-9
         const cueMatch = match.action.match(/^cue(\d)$/)
