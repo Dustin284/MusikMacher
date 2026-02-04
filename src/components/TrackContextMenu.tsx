@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from '../i18n/useTranslation'
-import type { Track, Tag } from '../types'
+import type { Track, Tag, Project } from '../types'
 
 interface TrackContextMenuProps {
   x: number
@@ -20,6 +20,9 @@ interface TrackContextMenuProps {
   onIdentifyTrack?: (track: Track) => void
   tags?: Tag[]
   onTagToggle?: (trackId: number, tagId: number, add: boolean) => void
+  projects?: Project[]
+  onProjectAssign?: (trackId: number, projectId: number | undefined) => void
+  inProject?: boolean
 }
 
 export default function TrackContextMenu({
@@ -39,6 +42,9 @@ export default function TrackContextMenu({
   onIdentifyTrack,
   tags,
   onTagToggle,
+  projects,
+  onProjectAssign,
+  inProject,
 }: TrackContextMenuProps) {
   const { t } = useTranslation()
   const menuRef = useRef<HTMLDivElement>(null)
@@ -184,13 +190,15 @@ export default function TrackContextMenu({
       hidden: !onIdentifyTrack,
     },
     {
-      label: t('context.delete'),
-      icon: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
+      label: inProject ? t('project.removeFromProject') : t('context.delete'),
+      icon: inProject
+        ? 'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1'
+        : 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16',
       onClick: () => {
         onDelete?.(track)
         onClose()
       },
-      danger: true,
+      danger: !inProject,
       separator: true,
       hidden: !onDelete,
     },
@@ -288,6 +296,46 @@ export default function TrackContextMenu({
                 </label>
               )
             })}
+          </div>
+        </>
+      )}
+      {/* Project assignment */}
+      {projects && projects.length > 0 && onProjectAssign && (
+        <>
+          <div className="my-1 border-t border-surface-200/60 dark:border-surface-700/60" />
+          <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-surface-400">
+            {t('project.assign')}
+          </div>
+          <div className="max-h-40 overflow-y-auto">
+            <label
+              className="w-full flex items-center gap-2.5 px-3 py-1 text-[13px] text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700/60 cursor-pointer transition-colors"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <input
+                type="radio"
+                name="project-assign"
+                checked={!track.projectId}
+                onChange={() => onProjectAssign(track.id!, undefined)}
+                className="shrink-0"
+              />
+              <span className="truncate text-surface-400 italic">{t('project.none')}</span>
+            </label>
+            {projects.map(proj => (
+              <label
+                key={proj.id}
+                className="w-full flex items-center gap-2.5 px-3 py-1 text-[13px] text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700/60 cursor-pointer transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="radio"
+                  name="project-assign"
+                  checked={track.projectId === proj.id}
+                  onChange={() => onProjectAssign(track.id!, proj.id)}
+                  className="shrink-0"
+                />
+                <span className="truncate">{proj.name}</span>
+              </label>
+            ))}
           </div>
         </>
       )}

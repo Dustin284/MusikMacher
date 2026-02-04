@@ -406,7 +406,7 @@ function SelectField<T>({ value, options, onChange }: {
             </svg>
           </span>
         </ListboxButton>
-        <ListboxOptions className="absolute z-10 mt-1 w-full rounded-xl bg-white dark:bg-surface-800 shadow-xl ring-1 ring-black/5 dark:ring-white/10 py-1 text-[13px] max-h-60 overflow-auto focus:outline-none backdrop-blur-xl">
+        <ListboxOptions anchor="bottom start" className="z-50 mt-1 w-[var(--button-width)] rounded-xl bg-white dark:bg-surface-800 shadow-xl ring-1 ring-black/5 dark:ring-white/10 py-1 text-[13px] max-h-60 overflow-auto focus:outline-none backdrop-blur-xl">
           {options.map((o, i) => (
             <ListboxOption key={i} value={o.value} className="cursor-pointer select-none px-3 py-2 data-[focus]:bg-primary-500/10 data-[selected]:font-semibold data-[selected]:text-primary-600 dark:data-[selected]:text-primary-400 transition-colors">
               {o.label}

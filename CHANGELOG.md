@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.3.0
+
+### Neue Features
+
+- **Projekt-System für Tracks** — Tracks können einem Projekt zugeordnet werden. Beim Wechsel des Projekts in der Sidebar werden nur die zugehörigen Tracks angezeigt. "Alle Projekte" zeigt weiterhin alle Tracks.
+- **Projekt-Zuweisung per Rechtsklick** — Im Kontextmenü erscheint ein neuer Bereich "Projekt" mit Radio-Buttons, um einen Track einem Projekt zuzuweisen oder die Zuordnung zu entfernen ("Kein Projekt").
+- **Auto-Zuordnung beim Import** — Neue Tracks werden automatisch dem aktuell ausgewählten Projekt zugeordnet — gilt für manuellen Import, Ordner-Import, Downloads und Ordner-Überwachung.
+- **Projekt-scoped Löschen** — Wenn ein Projekt ausgewählt ist, entfernt "Löschen" / Batch-Löschen den Track nur aus dem Projekt (Zuordnung aufheben). Der Track bleibt in "Alle Projekte" erhalten. Im Kontextmenü wird "Aus Projekt entfernen" statt "Löschen" angezeigt.
+
+### Verbesserungen
+
+- Tracks werden beim Projekt-Löschen automatisch freigegeben (projectId entfernt), sodass sie unter "Alle Projekte" sichtbar bleiben
+- Undo/Redo unterstützt Projekt-Zuweisung (`setProject`-Aktion)
+- Gelöschte Tracks werden beim Undo inkl. projectId wiederhergestellt
+- DB-Migration v9: `projectId`-Index auf der tracks-Tabelle
+
+---
+
 ## v1.2.0
 
 ### Neue Features

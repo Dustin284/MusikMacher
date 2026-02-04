@@ -71,6 +71,7 @@ export const useUndoStore = create<UndoStore>((set, get) => ({
               lastPlayedAt: snap.lastPlayedAt,
               isFavorite: snap.isFavorite,
               notes: snap.notes,
+              projectId: snap.projectId,
               artworkBlob: snap.artworkBlob,
             })
             if (action.audioBlob) {
@@ -104,6 +105,9 @@ export const useUndoStore = create<UndoStore>((set, get) => ({
           break
         case 'toggleFavorite':
           await updateTrack(action.trackId, { isFavorite: action.previousValue as boolean })
+          break
+        case 'setProject':
+          await updateTrack(action.trackId, { projectId: action.previousValue as number | undefined })
           break
       }
     } catch { /* undo failed */ }
@@ -148,6 +152,9 @@ export const useUndoStore = create<UndoStore>((set, get) => ({
           break
         case 'toggleFavorite':
           await updateTrack(action.trackId, { isFavorite: action.newValue as boolean })
+          break
+        case 'setProject':
+          await updateTrack(action.trackId, { projectId: action.newValue as number | undefined })
           break
       }
     } catch { /* redo failed */ }

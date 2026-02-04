@@ -134,6 +134,18 @@ class MusikMacherDB extends Dexie {
         if (track.notes === undefined) track.notes = []
       })
     })
+
+    // v9: Project assignment for tracks
+    this.version(9).stores({
+      tracks: '++id, name, path, category, isHidden, createdAt, rating, playCount, isFavorite, projectId',
+      tags: '++id, name, category, isHidden, isFavorite',
+      settings: 'id',
+      audioFiles: 'trackId',
+      importLocations: '++id, path, category',
+      libraries: '++id, name, order',
+      projects: '++id, name, order',
+      smartTags: '++id, name, category',
+    })
   }
 }
 
@@ -344,4 +356,13 @@ export async function incrementPlayCount(trackId: number): Promise<void> {
       lastPlayedAt: new Date().toISOString(),
     })
   }
+}
+
+// --- Track Project Assignment ---
+export async function setTrackProject(trackId: number, projectId: number | undefined): Promise<void> {
+  await db.tracks.update(trackId, { projectId })
+}
+
+export async function clearProjectFromTracks(projectId: number): Promise<void> {
+  await db.tracks.where('projectId').equals(projectId).modify({ projectId: undefined })
 }

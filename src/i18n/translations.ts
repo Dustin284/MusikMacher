@@ -175,6 +175,9 @@ const de = {
   'project.name': 'Projektname',
   'project.customer': 'Kunde',
   'project.delete': 'Projekt löschen',
+  'project.none': 'Kein Projekt',
+  'project.assign': 'Projekt',
+  'project.removeFromProject': 'Aus Projekt entfernen',
 
   // Player advanced
   'player.speed': 'Geschwindigkeit',
@@ -532,6 +535,9 @@ const en: typeof de = {
   'project.name': 'Project name',
   'project.customer': 'Customer',
   'project.delete': 'Delete project',
+  'project.none': 'No project',
+  'project.assign': 'Project',
+  'project.removeFromProject': 'Remove from project',
 
   // Player advanced
   'player.speed': 'Speed',

@@ -75,6 +75,7 @@ export interface Track {
   lastPlayedAt?: string
   isFavorite?: boolean
   notes?: WaveformNote[]
+  projectId?: number
 }
 
 // --- Smart Tags ---

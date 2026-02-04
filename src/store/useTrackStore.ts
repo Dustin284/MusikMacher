@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import type { Track, Tag, CuePoint, WaveformNote } from '../types'
 import { CATEGORY_TRACKS } from '../types'
-import { db, getTracks, getTags, addTag, updateTag, deleteTag, updateTrack, addTrack, storeAudioBlob, deleteTrack as dbDeleteTrack, getAudioBlob } from '../db/database'
+import { db, getTracks, getTags, addTag, updateTag, deleteTag, updateTrack, addTrack, storeAudioBlob, deleteTrack as dbDeleteTrack, getAudioBlob, setTrackProject as dbSetTrackProject } from '../db/database'
 import { useUndoStore } from './useUndoStore'
+import { useProjectStore } from './useProjectStore'
 
 interface TrackStore {
   tracks: Track[]
@@ -45,6 +46,8 @@ interface TrackStore {
   addTrackNote: (trackId: number, time: number, text: string) => Promise<void>
   updateTrackNote: (trackId: number, noteId: string, text: string) => Promise<void>
   deleteTrackNote: (trackId: number, noteId: string) => Promise<void>
+
+  setTrackProject: (trackId: number, projectId: number | undefined) => Promise<void>
 
   importTracks: (files: FileList, category: number, subfoldersTag: boolean) => Promise<string>
   importDownloadedTrack: (fileData: ArrayBuffer, fileName: string, filePath: string, category: number) => Promise<{ trackId: number | null; log: string }>
@@ -283,6 +286,15 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
     updateTrack(trackId, { notes })
   },
 
+  setTrackProject: async (trackId, projectId) => {
+    const { tracks } = get()
+    const track = tracks.find(t => t.id === trackId)
+    if (!track) return
+    useUndoStore.getState().pushAction({ type: 'setProject', trackId, previousValue: track.projectId, newValue: projectId })
+    set({ tracks: tracks.map(t => t.id === trackId ? { ...t, projectId } : t) })
+    await dbSetTrackProject(trackId, projectId)
+  },
+
   importTracks: async (files, category, subfoldersTag) => {
     let log = ''
     const audioExts = ['.mp3', '.m4a', '.mp4', '.wav', '.ogg', '.flac', '.webm']
@@ -320,6 +332,7 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
 
       const duration = await getAudioDuration(file)
 
+      const selectedProjectId = useProjectStore.getState().selectedProjectId
       const trackData: Omit<Track, 'id'> = {
         name: file.name,
         path: '',
@@ -329,6 +342,7 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
         isHidden: false,
         category,
         tagIds: [],
+        projectId: selectedProjectId ?? undefined,
       }
 
       if (subfoldersTag && file.webkitRelativePath) {
@@ -385,6 +399,7 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
     const file = new File([fileData], fileName, { type: 'audio/mpeg', lastModified: Date.now() })
     const duration = await getAudioDuration(file)
 
+    const selectedProjectId = useProjectStore.getState().selectedProjectId
     const trackData: Omit<Track, 'id'> = {
       name: fileName,
       path: '',
@@ -394,6 +409,7 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
       isHidden: false,
       category,
       tagIds: [],
+      projectId: selectedProjectId ?? undefined,
     }
 
     const artworkBlob = await extractArtwork(file)

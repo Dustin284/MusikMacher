@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useTrackStore } from '../store/useTrackStore'
 import { usePlayerStore } from '../store/usePlayerStore'
 import { useSettingsStore } from '../store/useSettingsStore'
+import { useProjectStore } from '../store/useProjectStore'
 import { useTranslation } from '../i18n/useTranslation'
 import { formatTime } from '../utils/formatTime'
 import { getAudioBlob, getFavoriteTracks, updateTrack as dbUpdateTrack } from '../db/database'
@@ -41,6 +42,9 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
   const settings = useSettingsStore(s => s.settings)
   const updateSettings = useSettingsStore(s => s.update)
   const toggleFavorite = useTrackStore(s => s.toggleFavorite)
+  const setTrackProject = useTrackStore(s => s.setTrackProject)
+  const selectedProjectId = useProjectStore(s => s.selectedProjectId)
+  const projects = useProjectStore(s => s.projects)
   const play = usePlayerStore(s => s.play)
   const addToQueue = usePlayerStore(s => s.addToQueue)
   const currentTrackId = usePlayerStore(s => s.currentTrack?.id)
@@ -78,6 +82,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
     const activeTags = tags.filter(t => t.isChecked)
     const terms = searchTerm.toLowerCase().split(/\s+/).filter(Boolean)
     return tracks.filter(track => {
+      if (selectedProjectId !== null && track.projectId !== selectedProjectId) return false
       if (!showHidden && track.isHidden) return false
       if (showFavoritesOnly && !track.isFavorite) return false
       if (terms.length > 0) {
@@ -94,7 +99,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
       }
       return true
     })
-  }, [tracks, tags, searchTerm, showHidden, showFavoritesOnly, settings.andTagCombination])
+  }, [tracks, tags, searchTerm, showHidden, showFavoritesOnly, settings.andTagCombination, selectedProjectId])
 
   const sortedTracks = useMemo(() => {
     const base = duplicateIds ? filteredTracks.filter(t => duplicateIds.has(t.id!)) : filteredTracks
@@ -268,7 +273,11 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
   // Batch operations
   const handleBatchDelete = async () => {
     for (const id of selectedTrackIds) {
-      await deleteTrackFromStore(id)
+      if (selectedProjectId !== null) {
+        await setTrackProject(id, undefined)
+      } else {
+        await deleteTrackFromStore(id)
+      }
     }
     setSelectedTrackIds(new Set())
   }
@@ -441,7 +450,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
           onExport={(track) => handleExport(track)}
           onEditComment={(track) => startEditComment(track)}
           onToggleHidden={(track) => track.isHidden ? unhideTrack(track.id!) : hideTrack(track.id!)}
-          onDelete={(track) => deleteTrackFromStore(track.id!)}
+          onDelete={(track) => selectedProjectId !== null ? setTrackProject(track.id!, undefined) : deleteTrackFromStore(track.id!)}
           onAnalyze={handleAnalyze}
           onAddToQueue={(track) => addToQueue(track)}
           onRate={(track, rating) => updateTrackRating(track.id!, rating)}
@@ -452,6 +461,9 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
             if (add) addTrackToTag(trackId, tagId)
             else removeTrackFromTag(trackId, tagId)
           }}
+          projects={projects}
+          onProjectAssign={(trackId, projectId) => setTrackProject(trackId, projectId)}
+          inProject={selectedProjectId !== null}
         />
       )}
 

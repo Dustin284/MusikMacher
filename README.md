@@ -22,6 +22,7 @@ Desktop-Anwendung zur Verwaltung von Musik- und Effekt-Bibliotheken, optimiert f
 - Smart Tags mit konfigurierbaren Regeln
 - Duplikat-Erkennung (gruppiert nach normalisiertem Tracknamen)
 - Sortierung nach Name, BPM, Tonart, Laenge, Bewertung, Erstelldatum
+- Projekt-System: Tracks einem Projekt zuordnen, Filter nach Projekt, Auto-Zuordnung beim Import
 - Drag & Drop in Adobe Premiere Pro (nativer Electron-Drag)
 
 ### Player
@@ -80,7 +81,7 @@ Desktop-Anwendung zur Verwaltung von Musik- und Effekt-Bibliotheken, optimiert f
 - Eigene Tastenkuerzel mit Recording-Modus (Taste druecken zum Zuweisen)
 - Tastenkuerzel-Uebersicht (Shift+?)
 - Zuruecksetzen auf Standard-Shortcuts
-- Projekt-Verwaltung (mehrere Projekte, Projekt-Filter)
+- Projekt-Verwaltung (Tracks zuordnen, Projekt-Filter, scoped Delete)
 - Deutsch / English
 - Dark / Light / System Theme
 - Konfigurierbarer Fenstertitel
