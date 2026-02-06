@@ -88,8 +88,8 @@ export interface SmartTag {
 }
 
 export interface SmartTagRule {
-  field: 'bpm' | 'musicalKey' | 'rating' | 'name' | 'comment' | 'duration' | 'tags'
-  operator: 'equals' | 'contains' | 'gt' | 'lt' | 'between' | 'isEmpty' | 'isNotEmpty'
+  field: 'bpm' | 'musicalKey' | 'rating' | 'name' | 'comment' | 'duration' | 'tags' | 'playCount' | 'isFavorite' | 'lastPlayedAt'
+  operator: 'equals' | 'contains' | 'gt' | 'lt' | 'between' | 'isEmpty' | 'isNotEmpty' | 'daysAgo'
   value: string
   value2?: string // for 'between'
 }

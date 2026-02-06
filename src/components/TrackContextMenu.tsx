@@ -18,6 +18,7 @@ interface TrackContextMenuProps {
   onRate?: (track: Track, rating: number) => void
   onToggleFavorite?: (track: Track) => void
   onIdentifyTrack?: (track: Track) => void
+  onSeparateStems?: (track: Track) => void
   tags?: Tag[]
   onTagToggle?: (trackId: number, tagId: number, add: boolean) => void
   projects?: Project[]
@@ -40,6 +41,7 @@ export default function TrackContextMenu({
   onRate,
   onToggleFavorite,
   onIdentifyTrack,
+  onSeparateStems,
   tags,
   onTagToggle,
   projects,
@@ -188,6 +190,15 @@ export default function TrackContextMenu({
         onClose()
       },
       hidden: !onIdentifyTrack,
+    },
+    {
+      label: t('context.separateStems'),
+      icon: 'M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3',
+      onClick: () => {
+        onSeparateStems?.(track)
+        onClose()
+      },
+      hidden: !onSeparateStems || !isElectron,
     },
     {
       label: inProject ? t('project.removeFromProject') : t('context.delete'),

@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.4.0
+
+### Neue Features
+
+- **Stem-Separation (Demucs)** — Tracks können per Rechtsklick in ihre Einzelspuren zerlegt werden (Vocals, Drums, Bass, Other). Wahlweise 4-Stem- oder 6-Stem-Modell (+ Guitar, Piano). Automatische Installation von Python, PyTorch und Demucs. GPU-Beschleunigung (NVIDIA CUDA) wird erkannt und genutzt.
+- **Audio-Visualizer** — Echtzeit-Frequenzspektrum als Overlay auf der Waveform. 64-Band-Equalizer-Darstellung mit Farbverlauf. Per Toggle-Button im Player ein-/ausschaltbar.
+- **Smart Playlists** — Dynamische Playlists basierend auf konfigurierbaren Regeln (BPM, Tonart, Bewertung, Name, Kommentar, Dauer, Tags, Wiedergaben, Favorit, Zuletzt gespielt). Regeln mit AND/OR-Logik kombinierbar. Echtzeit-Vorschau der passenden Tracks. Erstellen, bearbeiten und löschen direkt in der Sidebar.
+
+### Verbesserungen
+
+- GPU/CUDA-Erkennung wird beim App-Start im Hintergrund gecacht — kein Warten mehr beim Öffnen der Stem-Separation
+- Stem-Auswahl nach Separation mit individueller Umbenennung vor dem Import
+- Fortschrittsanzeige für Installation, Separation und Import
+- Lyrics-Panel: Verbesserte Auto-Scroll-Logik für präzisere Synchronisation
+- Layout-Stabilität: Overflow-Fix in der Browse-Ansicht
+
+---
+
 ## v1.3.0
 
 ### Neue Features

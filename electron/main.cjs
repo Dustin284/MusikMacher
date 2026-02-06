@@ -41,6 +41,13 @@ function createWindow() {
     mainWindow.show()
   })
 
+  // Enable F12 for DevTools in production
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12') {
+      mainWindow.webContents.toggleDevTools()
+    }
+  })
+
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000')
   } else {
@@ -136,12 +143,60 @@ function hasFfmpeg() {
 }
 
 // Download a file using Electron's net.fetch (handles redirects automatically)
-async function downloadToFile(url, destPath) {
-  const response = await net.fetch(url)
-  if (!response.ok) return false
-  const buffer = Buffer.from(await response.arrayBuffer())
-  fs.writeFileSync(destPath, buffer)
-  return true
+async function downloadToFile(url, destPath, onProgress) {
+  return new Promise((resolve) => {
+    const https = require('https')
+    const file = fs.createWriteStream(destPath)
+
+    const request = https.get(url, { timeout: 60000 }, (response) => {
+      // Handle redirects
+      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        file.close()
+        fs.unlinkSync(destPath)
+        downloadToFile(response.headers.location, destPath, onProgress).then(resolve)
+        return
+      }
+
+      if (response.statusCode !== 200) {
+        file.close()
+        console.error('[Download] Failed with status:', response.statusCode)
+        resolve(false)
+        return
+      }
+
+      const totalSize = parseInt(response.headers['content-length'] || '0', 10)
+      let downloadedSize = 0
+
+      response.on('data', (chunk) => {
+        downloadedSize += chunk.length
+        if (onProgress && totalSize > 0) {
+          onProgress(Math.round((downloadedSize / totalSize) * 100))
+        }
+      })
+
+      response.pipe(file)
+
+      file.on('finish', () => {
+        file.close()
+        resolve(true)
+      })
+    })
+
+    request.on('error', (err) => {
+      file.close()
+      console.error('[Download] Error:', err.message)
+      try { fs.unlinkSync(destPath) } catch {}
+      resolve(false)
+    })
+
+    request.on('timeout', () => {
+      request.destroy()
+      file.close()
+      console.error('[Download] Timeout')
+      try { fs.unlinkSync(destPath) } catch {}
+      resolve(false)
+    })
+  })
 }
 
 // Recursively find a file by name in a directory tree
@@ -1011,6 +1066,771 @@ ipcMain.handle('open-external', async (_event, url) => {
   await shell.openExternal(url)
 })
 
+// --- Stem Separation (Demucs) ---
+// Cached GPU/CUDA info (populated once at app start, refreshed after install)
+let cachedCudaInfo = null
+
+// Embedded Python for Demucs
+function getEmbeddedPythonDir() {
+  return path.join(getBinDir(), 'python')
+}
+
+function getEmbeddedPythonPath() {
+  return path.join(getEmbeddedPythonDir(), 'python.exe')
+}
+
+function hasEmbeddedPython() {
+  return fs.existsSync(getEmbeddedPythonPath())
+}
+
+// Check if demucs is available (either via embedded or system Python)
+function hasDemucs() {
+  // First check embedded Python
+  if (hasEmbeddedPython()) {
+    try {
+      const pythonPath = getEmbeddedPythonPath()
+      // Simple import check instead of --help (faster and more reliable)
+      execSync(`"${pythonPath}" -c "import demucs"`, { stdio: 'pipe', timeout: 30000 })
+      return true
+    } catch (e) {
+      console.log('[Demucs] Import check failed:', e.message)
+      return false
+    }
+  }
+  // Fallback to system Python
+  try {
+    execSync('python -c "import demucs"', { stdio: 'pipe', timeout: 15000 })
+    return true
+  } catch {
+    try {
+      execSync('python3 -c "import demucs"', { stdio: 'pipe', timeout: 15000 })
+      return true
+    } catch {
+      return false
+    }
+  }
+}
+
+function getPythonCommand() {
+  // First check embedded Python
+  if (hasEmbeddedPython()) {
+    return `"${getEmbeddedPythonPath()}"`
+  }
+  // Fallback to system Python
+  try {
+    execSync('python --version', { stdio: 'pipe', timeout: 5000 })
+    return 'python'
+  } catch {
+    try {
+      execSync('python3 --version', { stdio: 'pipe', timeout: 5000 })
+      return 'python3'
+    } catch {
+      return null
+    }
+  }
+}
+
+ipcMain.handle('check-demucs', async () => {
+  return hasDemucs()
+})
+
+// Detect CUDA/GPU — called once at startup and after demucs install
+function detectCudaInfo() {
+  if (!hasEmbeddedPython()) return { available: false, reason: 'Python not installed' }
+
+  try {
+    const pythonPath = getEmbeddedPythonPath()
+
+    // Write check script to temp file to avoid Windows cmd quoting/syntax issues
+    const scriptPath = path.join(app.getPath('temp'), 'lorus_cuda_check.py')
+    fs.writeFileSync(scriptPath, [
+      'import torch',
+      'cuda = torch.cuda.is_available()',
+      "print('torch_version:', torch.__version__)",
+      "print('cuda_available:', cuda)",
+      "print('cuda_version:', torch.version.cuda if torch.version.cuda else 'None')",
+      "print('device_count:', torch.cuda.device_count() if cuda else 0)",
+      "print('device_name:', torch.cuda.get_device_name(0) if cuda else 'N/A')",
+    ].join('\n'), 'utf8')
+
+    const result = execSync(
+      `"${pythonPath}" "${scriptPath}"`,
+      { encoding: 'utf8', timeout: 30000 }
+    ).trim()
+
+    try { fs.unlinkSync(scriptPath) } catch {}
+
+    console.log('[CUDA Check]', result)
+
+    // Parse the output (use indexOf to handle values containing ': ')
+    const lines = result.split('\n')
+    const info = {}
+    for (const line of lines) {
+      const idx = line.indexOf(': ')
+      if (idx > 0) {
+        info[line.substring(0, idx).trim()] = line.substring(idx + 2).trim()
+      }
+    }
+
+    const available = info['cuda_available'] === 'True'
+    return {
+      available,
+      device: available ? info['device_name'] : null,
+      torchVersion: info['torch_version'],
+      cudaVersion: info['cuda_version'],
+      reason: available ? null : `CUDA not available (torch ${info['torch_version']}, cuda ${info['cuda_version']})`
+    }
+  } catch (e) {
+    console.error('[CUDA Check Error]', e.message)
+    return { available: false, reason: e.message }
+  }
+}
+
+// Check if CUDA/GPU is available — returns cached result (populated at app start)
+ipcMain.handle('check-cuda', async () => {
+  if (cachedCudaInfo) return cachedCudaInfo
+  cachedCudaInfo = detectCudaInfo()
+  return cachedCudaInfo
+})
+
+ipcMain.handle('check-python', async () => {
+  // Always return true on Windows since we can auto-install embedded Python
+  if (process.platform === 'win32') return true
+  return getPythonCommand() !== null
+})
+
+// Debug handler to check installation state
+ipcMain.handle('debug-bin-state', async () => {
+  const binDir = getBinDir()
+  const pythonDir = getEmbeddedPythonDir()
+  const pythonExe = getEmbeddedPythonPath()
+
+  const state = {
+    binDir,
+    binDirExists: fs.existsSync(binDir),
+    binDirContents: fs.existsSync(binDir) ? fs.readdirSync(binDir) : [],
+    pythonDir,
+    pythonDirExists: fs.existsSync(pythonDir),
+    pythonDirContents: fs.existsSync(pythonDir) ? fs.readdirSync(pythonDir) : [],
+    pythonExe,
+    pythonExeExists: fs.existsSync(pythonExe),
+    hasDemucs: hasDemucs(),
+    hasEmbeddedPython: hasEmbeddedPython(),
+  }
+  console.log('[Debug] Bin state:', JSON.stringify(state, null, 2))
+  return state
+})
+
+// Download file using multiple methods for reliability
+async function downloadWithPowerShell(url, destPath) {
+  console.log('[Download] Attempting download:', url)
+  console.log('[Download] Destination:', destPath)
+
+  // Method 1: Try curl (available on Windows 10+)
+  try {
+    console.log('[Download] Trying curl...')
+    execSync(`curl -L -o "${destPath}" "${url}"`, { timeout: 300000, stdio: 'pipe' })
+    if (fs.existsSync(destPath) && fs.statSync(destPath).size > 1000) {
+      console.log('[Download] curl succeeded')
+      return true
+    }
+  } catch (e) {
+    console.log('[Download] curl failed:', e.message)
+  }
+
+  // Method 2: Try PowerShell Invoke-WebRequest
+  try {
+    console.log('[Download] Trying PowerShell Invoke-WebRequest...')
+    execSync(
+      `powershell -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '${url}' -OutFile '${destPath}' -UseBasicParsing"`,
+      { timeout: 300000, stdio: 'pipe' }
+    )
+    if (fs.existsSync(destPath) && fs.statSync(destPath).size > 1000) {
+      console.log('[Download] PowerShell Invoke-WebRequest succeeded')
+      return true
+    }
+  } catch (e) {
+    console.log('[Download] PowerShell Invoke-WebRequest failed:', e.message)
+  }
+
+  // Method 3: Try PowerShell WebClient
+  try {
+    console.log('[Download] Trying PowerShell WebClient...')
+    execSync(
+      `powershell -ExecutionPolicy Bypass -Command "(New-Object Net.WebClient).DownloadFile('${url}', '${destPath}')"`,
+      { timeout: 300000, stdio: 'pipe' }
+    )
+    if (fs.existsSync(destPath) && fs.statSync(destPath).size > 1000) {
+      console.log('[Download] PowerShell WebClient succeeded')
+      return true
+    }
+  } catch (e) {
+    console.log('[Download] PowerShell WebClient failed:', e.message)
+  }
+
+  // Method 4: Try Node.js https as fallback
+  try {
+    console.log('[Download] Trying Node.js https...')
+    const ok = await downloadToFile(url, destPath)
+    if (ok && fs.existsSync(destPath) && fs.statSync(destPath).size > 1000) {
+      console.log('[Download] Node.js https succeeded')
+      return true
+    }
+  } catch (e) {
+    console.log('[Download] Node.js https failed:', e.message)
+  }
+
+  console.error('[Download] All download methods failed')
+  return false
+}
+
+// Install embedded Python
+async function installEmbeddedPython(event) {
+  const pythonDir = getEmbeddedPythonDir()
+  const pythonExe = getEmbeddedPythonPath()
+
+  if (fs.existsSync(pythonExe)) {
+    console.log('[Python] Already installed at:', pythonExe)
+    return true
+  }
+
+  console.log('[Python] Installing embedded Python...')
+  console.log('[Python] Target directory:', pythonDir)
+
+  // Python 3.11 embeddable package (Windows x64)
+  const pythonUrl = 'https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip'
+  const pipUrl = 'https://bootstrap.pypa.io/get-pip.py'
+
+  const tempDir = path.join(app.getPath('temp'), 'python-install-' + Date.now())
+  try {
+    fs.mkdirSync(tempDir, { recursive: true })
+    console.log('[Python] Temp directory:', tempDir)
+  } catch (e) {
+    console.error('[Python] Failed to create temp dir:', e.message)
+    return false
+  }
+
+  try {
+    // Download Python embeddable using PowerShell
+    const zipPath = path.join(tempDir, 'python.zip')
+    console.log('[Python] Downloading Python from:', pythonUrl)
+    event?.sender?.send('demucs-progress', { percent: 2, phase: 'downloading' })
+
+    const ok = await downloadWithPowerShell(pythonUrl, zipPath)
+
+    if (!ok || !fs.existsSync(zipPath)) {
+      console.error('[Python] Download failed - file not created')
+      return false
+    }
+
+    const zipSize = fs.statSync(zipPath).size
+    console.log('[Python] Download complete, file size:', zipSize, 'bytes')
+
+    if (zipSize < 5000000) { // Less than 5MB - probably failed (should be ~15MB)
+      console.error('[Python] Downloaded file too small:', zipSize)
+      return false
+    }
+
+    event?.sender?.send('demucs-progress', { percent: 10, phase: 'extracting' })
+
+    // Remove old installation
+    if (fs.existsSync(pythonDir)) {
+      console.log('[Python] Removing old installation...')
+      try {
+        fs.rmSync(pythonDir, { recursive: true, force: true })
+      } catch (e) {
+        console.warn('[Python] Could not remove old dir:', e.message)
+      }
+    }
+    fs.mkdirSync(pythonDir, { recursive: true })
+
+    // Extract using PowerShell
+    console.log('[Python] Extracting to:', pythonDir)
+    event?.sender?.send('demucs-progress', { percent: 12, phase: 'extracting' })
+    try {
+      execSync(
+        `powershell -Command "Expand-Archive -LiteralPath '${zipPath}' -DestinationPath '${pythonDir}' -Force"`,
+        { timeout: 120000, stdio: 'pipe' }
+      )
+    } catch (extractErr) {
+      console.error('[Python] Extraction failed:', extractErr.message)
+      return false
+    }
+
+    // Verify python.exe exists after extraction
+    if (!fs.existsSync(pythonExe)) {
+      console.error('[Python] python.exe not found after extraction at:', pythonExe)
+      try {
+        console.log('[Python] Contents of pythonDir:', fs.readdirSync(pythonDir).join(', '))
+      } catch {}
+      return false
+    }
+    console.log('[Python] Extraction complete, python.exe found')
+
+    // Enable pip by modifying python311._pth
+    const pthFile = path.join(pythonDir, 'python311._pth')
+    if (fs.existsSync(pthFile)) {
+      let content = fs.readFileSync(pthFile, 'utf8')
+      content = content.replace('#import site', 'import site')
+      content += '\nLib\\site-packages\n'
+      fs.writeFileSync(pthFile, content)
+      console.log('[Python] Modified _pth file for pip support')
+    } else {
+      console.warn('[Python] _pth file not found:', pthFile)
+    }
+
+    // Create Lib/site-packages directory
+    const sitePackages = path.join(pythonDir, 'Lib', 'site-packages')
+    fs.mkdirSync(sitePackages, { recursive: true })
+
+    event?.sender?.send('demucs-progress', { percent: 14, phase: 'installing' })
+
+    // Download get-pip.py using PowerShell
+    const getPipPath = path.join(tempDir, 'get-pip.py')
+    console.log('[Python] Downloading pip installer...')
+
+    const pipOk = await downloadWithPowerShell(pipUrl, getPipPath)
+    if (!pipOk || !fs.existsSync(getPipPath)) {
+      console.error('[Python] get-pip download failed')
+      return false
+    }
+    console.log('[Python] get-pip.py downloaded, size:', fs.statSync(getPipPath).size)
+
+    event?.sender?.send('demucs-progress', { percent: 16, phase: 'installing' })
+
+    // Install pip
+    console.log('[Python] Installing pip with:', pythonExe)
+    try {
+      const pipResult = execSync(`"${pythonExe}" "${getPipPath}" --no-warn-script-location`, {
+        encoding: 'utf8',
+        timeout: 300000,
+        cwd: pythonDir,
+        stdio: ['pipe', 'pipe', 'pipe']
+      })
+      console.log('[Python] pip install output:', pipResult?.substring(0, 200))
+    } catch (pipErr) {
+      console.error('[Python] pip installation error:', pipErr.message)
+      // Try to continue
+    }
+
+    // Verify pip works
+    try {
+      const pipVersion = execSync(`"${pythonExe}" -m pip --version`, { encoding: 'utf8', timeout: 10000 })
+      console.log('[Python] pip version:', pipVersion.trim())
+    } catch (e) {
+      console.warn('[Python] pip verification failed:', e.message)
+    }
+
+    console.log('[Python] Embedded Python installation complete')
+    return fs.existsSync(pythonExe)
+  } catch (err) {
+    console.error('[Python] Installation error:', err.message || err)
+    return false
+  } finally {
+    // Cleanup temp directory
+    setTimeout(() => {
+      try { fs.rmSync(tempDir, { recursive: true, force: true }) } catch {}
+    }, 5000)
+  }
+}
+
+ipcMain.handle('install-demucs', async (event) => {
+  // Return object with success and optional error message
+  const fail = (msg) => {
+    console.error('[Demucs]', msg)
+    return { success: false, error: msg }
+  }
+
+  try {
+    if (hasDemucs()) {
+      console.log('[Demucs] Already installed')
+      return { success: true }
+    }
+
+    const isWin = process.platform === 'win32'
+    if (!isWin) {
+      return fail('Nur Windows wird unterstützt')
+    }
+
+    event.sender.send('demucs-progress', { percent: 1, phase: 'downloading' })
+
+    // Step 1: Install embedded Python if needed
+    if (!hasEmbeddedPython()) {
+      console.log('[Demucs] Installing embedded Python first...')
+      const pythonInstalled = await installEmbeddedPython(event)
+      if (!pythonInstalled) {
+        return fail('Python-Installation fehlgeschlagen. Prüfe deine Internetverbindung.')
+      }
+    }
+
+    // Double-check Python is really there
+    const pythonExe = getEmbeddedPythonPath()
+    if (!fs.existsSync(pythonExe)) {
+      return fail(`Python nicht gefunden: ${pythonExe}`)
+    }
+
+    console.log('[Demucs] Using Python:', pythonExe)
+    event.sender.send('demucs-progress', { percent: 20, phase: 'installing' })
+
+    // Upgrade pip first
+    console.log('[Demucs] Upgrading pip...')
+    try {
+      execSync(`"${pythonExe}" -m pip install --upgrade pip`, { stdio: 'pipe', timeout: 120000 })
+    } catch (e) {
+      console.log('[Demucs] pip upgrade skipped:', e.message)
+    }
+
+    event.sender.send('demucs-progress', { percent: 25, phase: 'installing' })
+
+    // Install PyTorch with CUDA support first, then demucs
+    console.log('[Demucs] Installing PyTorch with CUDA + demucs (this may take 10-15 minutes)...')
+
+    // Helper function to run pip install with progress
+    const pipInstallWithProgress = (args, progressStart, progressEnd, phaseName) => {
+      return new Promise((resolve, reject) => {
+        console.log(`[Demucs] Running: pip ${args.join(' ')}`)
+        event.sender.send('demucs-progress', { percent: progressStart, phase: phaseName })
+
+        const proc = spawn(pythonExe, ['-m', 'pip', 'install', ...args], {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          shell: false
+        })
+
+        let output = ''
+        let currentProgress = progressStart
+
+        // Simulate progress every 2 seconds
+        const interval = setInterval(() => {
+          if (currentProgress < progressEnd - 5) {
+            currentProgress += 1
+            event.sender.send('demucs-progress', { percent: currentProgress, phase: phaseName })
+          }
+        }, 2000)
+
+        proc.stdout.on('data', (data) => {
+          output += data.toString()
+          console.log('[pip stdout]', data.toString().substring(0, 100))
+        })
+
+        proc.stderr.on('data', (data) => {
+          const text = data.toString()
+          output += text
+          // pip shows download progress on stderr
+          const match = text.match(/(\d+)%/)
+          if (match) {
+            const pipPercent = parseInt(match[1])
+            currentProgress = progressStart + Math.round((pipPercent / 100) * (progressEnd - progressStart))
+            event.sender.send('demucs-progress', { percent: currentProgress, phase: phaseName })
+          }
+        })
+
+        proc.on('close', (code) => {
+          clearInterval(interval)
+          if (code === 0) {
+            event.sender.send('demucs-progress', { percent: progressEnd, phase: phaseName })
+            resolve(true)
+          } else {
+            reject(new Error(`pip install failed (code ${code}): ${output.slice(-300)}`))
+          }
+        })
+
+        proc.on('error', (err) => {
+          clearInterval(interval)
+          reject(err)
+        })
+      })
+    }
+
+    // Step 1: Install PyTorch with CUDA 11.8 support (works with most NVIDIA GPUs)
+    try {
+      console.log('[Demucs] Installing PyTorch with CUDA...')
+      await pipInstallWithProgress(
+        ['torch', 'torchvision', 'torchaudio', '--index-url', 'https://download.pytorch.org/whl/cu118'],
+        25, 60, 'installing PyTorch (CUDA)'
+      )
+      console.log('[Demucs] PyTorch with CUDA installed')
+    } catch (e) {
+      console.log('[Demucs] CUDA PyTorch install failed, trying CPU version:', e.message)
+      // Fallback to CPU version if CUDA install fails
+      try {
+        await pipInstallWithProgress(
+          ['torch', 'torchvision', 'torchaudio'],
+          25, 60, 'installing PyTorch (CPU)'
+        )
+      } catch (e2) {
+        return { success: false, error: 'PyTorch Installation fehlgeschlagen: ' + e2.message }
+      }
+    }
+
+    // Step 2: Install demucs
+    try {
+      console.log('[Demucs] Installing demucs...')
+      await pipInstallWithProgress(
+        ['demucs'],
+        60, 95, 'installing Demucs'
+      )
+    } catch (e) {
+      return { success: false, error: 'Demucs Installation fehlgeschlagen: ' + e.message }
+    }
+
+    // Verify installation (but don't fail if import check is slow)
+    event.sender.send('demucs-progress', { percent: 98, phase: 'verifying' })
+
+    // Give Python a moment to recognize new packages
+    await new Promise(r => setTimeout(r, 2000))
+
+    const installed = hasDemucs()
+    event.sender.send('demucs-progress', { percent: 100, phase: 'done' })
+    console.log('[Demucs] Installation complete, verified:', installed)
+
+    // Refresh GPU cache after PyTorch installation
+    cachedCudaInfo = detectCudaInfo()
+    console.log('[Demucs] GPU cache refreshed:', cachedCudaInfo?.available ? cachedCudaInfo.device : 'not available')
+
+    // Return success if pip install worked - the import might just be slow first time
+    return { success: true }
+
+  } catch (err) {
+    console.error('[Demucs] Installation error:', err)
+    return { success: false, error: err.message || String(err) }
+  }
+})
+
+ipcMain.handle('separate-stems', async (event, trackId, model) => {
+  try {
+    // First verify Python exists
+    const pythonExe = getEmbeddedPythonPath()
+    if (!fs.existsSync(pythonExe)) {
+      console.error('[Demucs] Python not found at:', pythonExe)
+      return { success: false, error: `Python nicht installiert. Bitte installiere zuerst Demucs. (${pythonExe})` }
+    }
+
+    if (!hasDemucs()) {
+      return { success: false, error: 'Demucs nicht installiert. Klicke auf "Demucs installieren".' }
+    }
+
+    // Get the raw python path (without quotes) for spawn
+    const pythonPath = getEmbeddedPythonPath()
+    if (!fs.existsSync(pythonPath)) {
+      return { success: false, error: 'Python nicht gefunden: ' + pythonPath }
+    }
+
+    // Get audio from disk cache
+    const audioPath = path.join(audioCacheDir, String(trackId))
+    if (!fs.existsSync(audioPath)) {
+      return { success: false, error: 'Audio file not found in cache' }
+    }
+
+    // Create output directory
+    const outputDir = path.join(app.getPath('temp'), 'demucs-output', String(trackId))
+    if (fs.existsSync(outputDir)) fs.rmSync(outputDir, { recursive: true, force: true })
+    fs.mkdirSync(outputDir, { recursive: true })
+
+    // Model selection: htdemucs (4 stems) or htdemucs_6s (6 stems)
+    const modelName = model === '6' ? 'htdemucs_6s' : 'htdemucs'
+
+    // Use cached CUDA info (populated at app start) instead of running Python again
+    const useCuda = cachedCudaInfo?.available || false
+    console.log('[Demucs] CUDA available (cached):', useCuda)
+
+    return new Promise((resolve) => {
+      event.sender.send('separation-progress', { percent: 0, phase: useCuda ? 'starting (GPU)' : 'starting (CPU)' })
+
+      // Use python -m demucs instead of calling executable directly
+      const args = [
+        '-m', 'demucs',
+        '-n', modelName,
+        '-o', outputDir,
+        '--mp3',
+      ]
+
+      // Add device flag for GPU acceleration
+      if (useCuda) {
+        args.push('--device', 'cuda')
+      }
+
+      args.push(audioPath)
+
+      console.log('[Demucs] Running:', pythonPath, args.join(' '), useCuda ? '(GPU)' : '(CPU)')
+
+      // Add bin directory to PATH so demucs can find ffmpeg
+      const binDir = getBinDir()
+      const envWithPath = {
+        ...process.env,
+        PATH: binDir + path.delimiter + (process.env.PATH || ''),
+      }
+      console.log('[Demucs] Added to PATH:', binDir)
+
+      // Don't use shell - pass raw path directly to spawn
+      const proc = spawn(pythonPath, args, {
+        env: envWithPath,
+        shell: false,
+      })
+
+      let stderrOutput = ''
+      let stdoutOutput = ''
+      let lastReportedProgress = 0
+      let hasReceivedOutput = false
+
+      // Parse progress from demucs/tqdm output
+      const parseProgress = (text) => {
+        // Try multiple patterns for tqdm progress bars
+        // Pattern 1: "XX%" anywhere in text
+        const percentMatch = text.match(/(\d+)%/)
+        if (percentMatch) {
+          return parseInt(percentMatch[1])
+        }
+
+        // Pattern 2: "N/M" format like "2/4" for stems
+        const fractionMatch = text.match(/(\d+)\/(\d+)/)
+        if (fractionMatch) {
+          const current = parseInt(fractionMatch[1])
+          const total = parseInt(fractionMatch[2])
+          if (total > 0) {
+            return Math.round((current / total) * 100)
+          }
+        }
+
+        // Pattern 3: Check for "Separating" or processing keywords to show activity
+        if (text.includes('Separating') || text.includes('Loading') || text.includes('Processing')) {
+          return -1 // Signal activity without specific progress
+        }
+
+        return null
+      }
+
+      // Simulate progress as fallback (keeps advancing even if output has no parseable progress)
+      let simulatedProgress = 5
+      const progressInterval = setInterval(() => {
+        if (simulatedProgress < 90) {
+          simulatedProgress += 2
+          // Only send simulated progress if real progress hasn't surpassed it
+          if (simulatedProgress > lastReportedProgress) {
+            lastReportedProgress = simulatedProgress
+            event.sender.send('separation-progress', { percent: simulatedProgress, phase: 'separating' })
+          } else {
+            // Real progress is ahead, keep simulated in sync
+            simulatedProgress = lastReportedProgress + 2
+          }
+        }
+      }, 3000) // Update every 3 seconds
+
+      proc.stdout.on('data', (data) => {
+        const text = data.toString()
+        stdoutOutput += text
+        hasReceivedOutput = true
+        console.log('[Demucs stdout]', text.replace(/\r/g, '\\r').substring(0, 200))
+
+        const progress = parseProgress(text)
+        if (progress !== null && progress >= 0 && progress > lastReportedProgress) {
+          lastReportedProgress = progress
+          event.sender.send('separation-progress', { percent: progress, phase: 'separating' })
+        } else if (progress === -1 && lastReportedProgress < 10) {
+          // Activity detected but no specific progress - show some progress
+          lastReportedProgress = 10
+          event.sender.send('separation-progress', { percent: 10, phase: 'separating' })
+        }
+      })
+
+      proc.stderr.on('data', (data) => {
+        const text = data.toString()
+        stderrOutput += text
+        hasReceivedOutput = true
+        console.log('[Demucs stderr]', text.replace(/\r/g, '\\r').substring(0, 200))
+
+        const progress = parseProgress(text)
+        if (progress !== null && progress >= 0 && progress > lastReportedProgress) {
+          lastReportedProgress = progress
+          event.sender.send('separation-progress', { percent: progress, phase: 'separating' })
+        } else if (progress === -1 && lastReportedProgress < 10) {
+          lastReportedProgress = 10
+          event.sender.send('separation-progress', { percent: 10, phase: 'separating' })
+        }
+      })
+
+      proc.on('close', (code) => {
+        clearInterval(progressInterval)
+
+        if (code === 0) {
+          event.sender.send('separation-progress', { percent: 100, phase: 'done' })
+
+          // Find output stem files
+          const stemDir = findStemDir(outputDir)
+          if (!stemDir) {
+            resolve({ success: false, error: 'Could not find output stems' })
+            return
+          }
+
+          const stems = []
+          const stemFiles = fs.readdirSync(stemDir)
+          for (const file of stemFiles) {
+            if (file.endsWith('.mp3') || file.endsWith('.wav')) {
+              const stemType = file.replace(/\.(mp3|wav)$/, '')
+              const stemPath = path.join(stemDir, file)
+              const buffer = fs.readFileSync(stemPath)
+              stems.push({
+                type: stemType,
+                fileName: file,
+                data: buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
+              })
+            }
+          }
+
+          resolve({ success: true, stems })
+        } else {
+          // Get more detailed error message
+          console.error('[Demucs] Separation failed with code:', code)
+          console.error('[Demucs] stdout:', stdoutOutput)
+          console.error('[Demucs] stderr:', stderrOutput)
+
+          // Combine all output for error analysis
+          const allOutput = (stderrOutput + '\n' + stdoutOutput).trim()
+
+          if (!allOutput) {
+            resolve({ success: false, error: `Prozess beendet mit code ${code}. Keine Ausgabe erfasst. Prüfe ob Python/Demucs korrekt installiert sind.` })
+            return
+          }
+
+          // Try to find the most relevant error line
+          const lines = allOutput.split('\n')
+          const errorLine = lines.find(l =>
+            l.includes('Error') || l.includes('error') ||
+            l.includes('Exception') || l.includes('ImportError') ||
+            l.includes('ModuleNotFoundError')
+          ) || lines.slice(-5).join('\n') || `exit code ${code}`
+
+          resolve({ success: false, error: errorLine.slice(0, 500) })
+        }
+      })
+
+      proc.on('error', (err) => {
+        resolve({ success: false, error: err.message })
+      })
+    })
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
+
+// Find the actual stem output directory (demucs creates nested dirs)
+function findStemDir(baseDir) {
+  const entries = fs.readdirSync(baseDir, { withFileTypes: true })
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      const subPath = path.join(baseDir, entry.name)
+      // Check if this directory contains stem files
+      const files = fs.readdirSync(subPath)
+      if (files.some(f => f.endsWith('.mp3') || f.endsWith('.wav'))) {
+        return subPath
+      }
+      // Check subdirectories
+      const nested = findStemDir(subPath)
+      if (nested) return nested
+    }
+  }
+  return null
+}
+
 // --- Clipboard notification popup (custom BrowserWindow) ---
 let notifWindow = null
 let notifData = { url: '', platform: '' }
@@ -1236,6 +2056,15 @@ app.whenReady().then(() => {
   if (!isDev) {
     setupAutoUpdater()
   }
+
+  // Pre-cache GPU/CUDA detection in background so stem separation doesn't wait
+  setTimeout(() => {
+    if (hasEmbeddedPython()) {
+      console.log('[Startup] Detecting GPU/CUDA...')
+      cachedCudaInfo = detectCudaInfo()
+      console.log('[Startup] GPU cached:', cachedCudaInfo?.available ? cachedCudaInfo.device : 'not available')
+    }
+  }, 3000)
 
   // --- Clipboard watcher: detect YouTube/SoundCloud/Spotify URLs ---
   let lastClipboardText = ''

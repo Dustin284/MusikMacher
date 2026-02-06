@@ -3,12 +3,14 @@ import { useTrackStore } from '../store/useTrackStore'
 import { usePlayerStore } from '../store/usePlayerStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useProjectStore } from '../store/useProjectStore'
+import { useSmartPlaylistStore } from '../store/useSmartPlaylistStore'
 import { useTranslation } from '../i18n/useTranslation'
 import { formatTime } from '../utils/formatTime'
 import { getAudioBlob, getFavoriteTracks, updateTrack as dbUpdateTrack } from '../db/database'
 import { detectBPM, detectKey } from '../utils/audioAnalysis'
 import TagAssignmentPopover from './TagAssignmentPopover'
 import TrackContextMenu from './TrackContextMenu'
+import StemSeparationModal from './StemSeparationModal'
 import type { Track } from '../types'
 
 const ROW_HEIGHT = 41
@@ -45,6 +47,8 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
   const setTrackProject = useTrackStore(s => s.setTrackProject)
   const selectedProjectId = useProjectStore(s => s.selectedProjectId)
   const projects = useProjectStore(s => s.projects)
+  const { playlists, activePlaylistId, evaluatePlaylist } = useSmartPlaylistStore()
+  const activePlaylist = playlists.find(p => p.id === activePlaylistId)
   const play = usePlayerStore(s => s.play)
   const addToQueue = usePlayerStore(s => s.addToQueue)
   const currentTrackId = usePlayerStore(s => s.currentTrack?.id)
@@ -64,6 +68,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false)
   const [showColumnSettings, setShowColumnSettings] = useState(false)
   const [identifyingTrackId, setIdentifyingTrackId] = useState<number | null>(null)
+  const [stemSeparationTrack, setStemSeparationTrack] = useState<Track | null>(null)
   const tableRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -81,7 +86,14 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
   const filteredTracks = useMemo(() => {
     const activeTags = tags.filter(t => t.isChecked)
     const terms = searchTerm.toLowerCase().split(/\s+/).filter(Boolean)
-    return tracks.filter(track => {
+
+    // If smart playlist is active, get matching tracks first
+    let basePool = tracks
+    if (activePlaylist) {
+      basePool = evaluatePlaylist(activePlaylist, tracks, tags)
+    }
+
+    return basePool.filter(track => {
       if (selectedProjectId !== null && track.projectId !== selectedProjectId) return false
       if (!showHidden && track.isHidden) return false
       if (showFavoritesOnly && !track.isFavorite) return false
@@ -99,7 +111,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
       }
       return true
     })
-  }, [tracks, tags, searchTerm, showHidden, showFavoritesOnly, settings.andTagCombination, selectedProjectId])
+  }, [tracks, tags, searchTerm, showHidden, showFavoritesOnly, settings.andTagCombination, selectedProjectId, activePlaylist, evaluatePlaylist])
 
   const sortedTracks = useMemo(() => {
     const base = duplicateIds ? filteredTracks.filter(t => duplicateIds.has(t.id!)) : filteredTracks
@@ -456,6 +468,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
           onRate={(track, rating) => updateTrackRating(track.id!, rating)}
           onToggleFavorite={(track) => toggleFavorite(track.id!)}
           onIdentifyTrack={settings.acoustidApiKey ? handleIdentifyTrack : undefined}
+          onSeparateStems={(track) => setStemSeparationTrack(track)}
           tags={tags}
           onTagToggle={(trackId, tagId, add) => {
             if (add) addTrackToTag(trackId, tagId)
@@ -466,6 +479,14 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
           inProject={selectedProjectId !== null}
         />
       )}
+
+      {/* Stem Separation Modal */}
+      <StemSeparationModal
+        isOpen={stemSeparationTrack !== null}
+        onClose={() => setStemSeparationTrack(null)}
+        track={stemSeparationTrack}
+        category={category}
+      />
 
       {/* Search bar */}
       <div className="p-2.5 flex items-center gap-2.5">

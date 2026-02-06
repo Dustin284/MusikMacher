@@ -80,6 +80,19 @@ export interface ElectronAPI {
   installFpcalc?: () => Promise<boolean>
   generateFingerprint?: (trackId: number) => Promise<{ fingerprint: string; duration: number } | null>
   acoustidLookup?: (fingerprint: string, duration: number, apiKey: string) => Promise<{ title: string | null; artist: string | null; score: number } | null>
+
+  // Stem separation (Demucs)
+  checkPython?: () => Promise<boolean>
+  checkDemucs?: () => Promise<boolean>
+  checkCuda?: () => Promise<{ available: boolean; device?: string | null; reason?: string }>
+  installDemucs?: () => Promise<boolean | { success: boolean; error?: string }>
+  separateStems?: (trackId: number, model: string) => Promise<{
+    success: boolean
+    stems?: { type: string; fileName: string; data: ArrayBuffer }[]
+    error?: string
+  }>
+  onDemucsProgress?: (cb: (data: { percent: number; phase: string }) => void) => void
+  onSeparationProgress?: (cb: (data: { percent: number; phase: string }) => void) => void
 }
 
 declare global {

@@ -136,12 +136,14 @@ export default function Browse({ category, isActive }: BrowseProps) {
   }, [handleKeyDown])
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex flex-1 min-h-0">
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="flex flex-1 min-h-0 overflow-hidden">
         <TagSidebar />
         <TrackGrid category={category} isActive={isActive} />
       </div>
-      <Player />
+      <div className="shrink-0">
+        <Player />
+      </div>
     </div>
   )
 }

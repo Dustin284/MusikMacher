@@ -1,7 +1,10 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react'
 import { useTrackStore } from '../store/useTrackStore'
+import { useSmartPlaylistStore } from '../store/useSmartPlaylistStore'
 import { useTranslation } from '../i18n/useTranslation'
+import SmartPlaylistModal from './SmartPlaylistModal'
+import type { SmartTag } from '../types'
 
 export default function TagSidebar() {
   const tagSearch = useTrackStore(s => s.tagSearch)
@@ -17,7 +20,29 @@ export default function TagSidebar() {
   const resetTags = useTrackStore(s => s.resetTags)
   const getFilteredTags = useTrackStore(s => s.getFilteredTags)
   const addTrackToTag = useTrackStore(s => s.addTrackToTag)
+  const tracks = useTrackStore(s => s.tracks)
+  const tags = useTrackStore(s => s.tags)
+  const category = useTrackStore(s => s.category)
   const { t } = useTranslation()
+
+  // Smart Playlists
+  const { playlists, activePlaylistId, loadPlaylists, setActivePlaylist, deletePlaylist, getMatchingCount } = useSmartPlaylistStore()
+  const [smartPlaylistModalOpen, setSmartPlaylistModalOpen] = useState(false)
+  const [editingPlaylist, setEditingPlaylist] = useState<SmartTag | null>(null)
+
+  useEffect(() => {
+    loadPlaylists(category)
+  }, [category, loadPlaylists])
+
+  const handleEditPlaylist = (playlist: SmartTag) => {
+    setEditingPlaylist(playlist)
+    setSmartPlaylistModalOpen(true)
+  }
+
+  const handleCreatePlaylist = () => {
+    setEditingPlaylist(null)
+    setSmartPlaylistModalOpen(true)
+  }
 
   const filteredTags = getFilteredTags()
   const [newTagName, setNewTagName] = useState('')
@@ -110,6 +135,73 @@ export default function TagSidebar() {
           {t('tags.hidden')}
         </label>
       </div>
+
+      {/* Smart Playlists section */}
+      {playlists.length > 0 && (
+        <div className="px-1.5 pb-2">
+          <div className="flex items-center justify-between px-2 py-1">
+            <span className="text-[11px] font-semibold text-surface-500 uppercase tracking-wide">
+              {t('smartPlaylist.title')}
+            </span>
+            <button
+              onClick={handleCreatePlaylist}
+              className="p-0.5 rounded hover:bg-surface-200/60 dark:hover:bg-surface-700/60 transition-colors"
+              title={t('smartPlaylist.create')}
+            >
+              <svg className="w-3.5 h-3.5 text-surface-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+            </button>
+          </div>
+          <div className="space-y-0.5">
+            {playlists.map((playlist) => (
+              <div key={playlist.id} className="group flex items-center rounded-lg">
+                <button
+                  onClick={() => setActivePlaylist(activePlaylistId === playlist.id ? null : playlist.id!)}
+                  className={`flex-1 text-left px-2.5 py-1.5 text-[13px] rounded-lg transition-all duration-150 truncate ${
+                    activePlaylistId === playlist.id
+                      ? 'bg-primary-500/15 text-primary-700 dark:text-primary-300 font-semibold ring-1 ring-primary-500/20'
+                      : 'hover:bg-surface-200/60 dark:hover:bg-surface-800/60'
+                  }`}
+                >
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-1.5">
+                      <svg className="w-3.5 h-3.5 text-primary-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" />
+                      </svg>
+                      {playlist.name}
+                    </span>
+                    <span className="text-[11px] text-surface-400 font-normal">
+                      {getMatchingCount(playlist, tracks, tags)}
+                    </span>
+                  </span>
+                </button>
+
+                <Menu as="div" className="relative opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                  <MenuButton className="p-1 rounded-md hover:bg-surface-300/60 dark:hover:bg-surface-700/60 transition-colors">
+                    <svg className="w-3.5 h-3.5 text-surface-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                    </svg>
+                  </MenuButton>
+                  <MenuItems className="absolute right-0 z-30 mt-1 w-36 rounded-xl bg-white dark:bg-surface-800 shadow-xl ring-1 ring-black/10 dark:ring-white/10 py-1 text-[13px] backdrop-blur-xl">
+                    <MenuItem>
+                      <button onClick={() => handleEditPlaylist(playlist)} className="block w-full text-left px-3 py-1.5 data-[focus]:bg-surface-100 dark:data-[focus]:bg-surface-700 transition-colors">
+                        {t('smartPlaylist.edit')}
+                      </button>
+                    </MenuItem>
+                    <div className="my-1 border-t border-surface-200 dark:border-surface-700" />
+                    <MenuItem>
+                      <button onClick={() => deletePlaylist(playlist.id!)} className="block w-full text-left px-3 py-1.5 text-red-500 data-[focus]:bg-red-50 dark:data-[focus]:bg-red-900/20 transition-colors">
+                        {t('smartPlaylist.delete')}
+                      </button>
+                    </MenuItem>
+                  </MenuItems>
+                </Menu>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Tag list */}
       <div className="flex-1 overflow-y-auto px-1.5 space-y-0.5">
@@ -214,7 +306,28 @@ export default function TagSidebar() {
             </svg>
           </button>
         </div>
+
+        {/* Create Smart Playlist button */}
+        <button
+          onClick={handleCreatePlaylist}
+          className="w-full mt-2 px-2.5 py-1.5 text-[12px] rounded-lg border border-dashed border-surface-300 dark:border-surface-700 text-surface-500 hover:text-primary-600 hover:border-primary-400 dark:hover:border-primary-600 hover:bg-primary-50/50 dark:hover:bg-primary-900/20 transition-all flex items-center justify-center gap-1.5"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" />
+          </svg>
+          {t('smartPlaylist.create')}
+        </button>
       </div>
+
+      {/* Smart Playlist Modal */}
+      <SmartPlaylistModal
+        isOpen={smartPlaylistModalOpen}
+        onClose={() => setSmartPlaylistModalOpen(false)}
+        playlist={editingPlaylist}
+        category={category}
+        tracks={tracks}
+        tags={tags}
+      />
     </div>
   )
 }

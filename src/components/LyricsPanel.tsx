@@ -57,15 +57,6 @@ export default function LyricsPanel({ track: trackProp }: LyricsPanelProps = {})
     }
   }, [track?.id, track?.lyrics, track?.lrcLyrics])
 
-  // Auto-scroll to current line in non-edit mode
-  useEffect(() => {
-    if (isEditing || isSyncMode || !activeLineRef.current) return
-    activeLineRef.current.scrollIntoView({
-      behavior: 'smooth',
-      block: 'center',
-    })
-  }, [position, isEditing, isSyncMode])
-
   // Find the current LRC line based on playback position
   const currentLineIndex = lrcLines.length > 0
     ? lrcLines.reduce((bestIdx, line, idx) => {
@@ -73,6 +64,25 @@ export default function LyricsPanel({ track: trackProp }: LyricsPanelProps = {})
         return bestIdx
       }, -1)
     : -1
+
+  // Auto-scroll to current line in non-edit mode (contained within lyrics panel)
+  useEffect(() => {
+    if (isEditing || isSyncMode || !activeLineRef.current || !lyricsContainerRef.current) return
+
+    const container = lyricsContainerRef.current
+    const activeLine = activeLineRef.current
+
+    // Calculate scroll position to center the active line
+    const containerHeight = container.clientHeight
+    const lineTop = activeLine.offsetTop
+    const lineHeight = activeLine.offsetHeight
+    const targetScroll = lineTop - (containerHeight / 2) + (lineHeight / 2)
+
+    container.scrollTo({
+      top: Math.max(0, targetScroll),
+      behavior: 'smooth'
+    })
+  }, [currentLineIndex, isEditing, isSyncMode])
 
   const settings = useSettingsStore(s => s.settings)
   const updateSettings = useSettingsStore(s => s.update)

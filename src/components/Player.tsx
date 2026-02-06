@@ -8,6 +8,7 @@ import { formatTime } from '../utils/formatTime'
 import Waveform from './Waveform'
 import LyricsPanel from './LyricsPanel'
 import QueuePanel from './QueuePanel'
+import AudioVisualizer from './AudioVisualizer'
 
 const PositionTime = memo(function PositionTime() {
   const position = usePlayerStore(s => s.position)
@@ -195,6 +196,9 @@ export default function Player() {
   const setCompRelease = usePlayerStore(s => s.setCompRelease)
   const setCompKnee = usePlayerStore(s => s.setCompKnee)
   const resetFx = usePlayerStore(s => s.resetFx)
+  const showVisualizer = usePlayerStore(s => s.showVisualizer)
+  const toggleVisualizer = usePlayerStore(s => s.toggleVisualizer)
+  const getAnalyserNode = usePlayerStore(s => s.getAnalyserNode)
 
   const [showEqPanel, setShowEqPanel] = useState(false)
   const [eqPanelPos, setEqPanelPos] = useState({ bottom: 0, left: 0 })
@@ -382,8 +386,14 @@ export default function Player() {
           {/* Waveform + time */}
           <div className="flex items-center gap-2.5 flex-1">
             <PositionTime />
-            <div className="flex-1 h-14">
+            <div className="flex-1 h-14 relative">
               <Waveform peaks={waveformPeaks} audio={audio} duration={duration} onSeek={seek} cuePoints={cuePoints} notes={currentTrack.notes} onAddNote={handleAddNote} onDeleteNote={handleDeleteNote} />
+              {/* Visualizer overlay */}
+              {showVisualizer && (
+                <div className="absolute inset-0 pointer-events-none">
+                  <AudioVisualizer analyserNode={getAnalyserNode()} isPlaying={isPlaying} />
+                </div>
+              )}
             </div>
             {noteInput && (
               <div className="absolute z-20 bottom-full mb-2 left-1/2 -translate-x-1/2">
@@ -499,6 +509,22 @@ export default function Player() {
                 +
               </button>
             </div>
+
+            {/* Visualizer toggle */}
+            <button
+              onClick={toggleVisualizer}
+              className={`px-2 py-1 rounded-lg text-[11px] font-medium transition-all flex items-center gap-1 ${
+                showVisualizer
+                  ? 'bg-purple-500/20 text-purple-400'
+                  : 'hover:bg-surface-200/60 dark:hover:bg-surface-800/60 text-surface-500'
+              }`}
+              title={t('player.visualizer')}
+            >
+              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M6 8h2v8H6V8zm4-4h2v16h-2V4zm4 8h2v4h-2v-4zm4-2h2v6h-2v-6z" />
+              </svg>
+              VIS
+            </button>
 
             {/* EQ control */}
             <div className="relative">

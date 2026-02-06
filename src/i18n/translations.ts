@@ -332,6 +332,9 @@ const de = {
   'notes.placeholder': 'Notiz eingeben...',
   'notes.altClick': 'Alt+Klick für Notiz',
 
+  // Player Visualizer
+  'player.visualizer': 'Visualizer',
+
   // Player FX
   'player.fx': 'FX',
   'player.reverb': 'Reverb',
@@ -358,6 +361,54 @@ const de = {
 
   // Settings - AcoustID
   'settings.acoustidApiKey': 'AcoustID API Key',
+
+  // Smart Playlists
+  'smartPlaylist.title': 'Smart Playlists',
+  'smartPlaylist.create': 'Smart Playlist erstellen',
+  'smartPlaylist.edit': 'Bearbeiten',
+  'smartPlaylist.delete': 'Löschen',
+  'smartPlaylist.save': 'Speichern',
+  'smartPlaylist.name': 'Name',
+  'smartPlaylist.namePlaceholder': 'Playlist-Name eingeben...',
+  'smartPlaylist.matchMode': 'Verknüpfung',
+  'smartPlaylist.matchAll': 'Alle Regeln (UND)',
+  'smartPlaylist.matchAny': 'Eine Regel (ODER)',
+  'smartPlaylist.rules': 'Regeln',
+  'smartPlaylist.addRule': 'Regel hinzufügen',
+  'smartPlaylist.tracksMatch': '{count} Tracks gefunden',
+  'smartPlaylist.playCount': 'Wiedergaben',
+  'smartPlaylist.lastPlayed': 'Zuletzt gespielt',
+  'smartPlaylist.selectTag': 'Tag auswählen...',
+  'smartPlaylist.daysPlaceholder': 'Tage',
+  'smartPlaylist.opEquals': 'ist gleich',
+  'smartPlaylist.opContains': 'enthält',
+  'smartPlaylist.opGt': 'größer als',
+  'smartPlaylist.opLt': 'kleiner als',
+  'smartPlaylist.opBetween': 'zwischen',
+  'smartPlaylist.opIsEmpty': 'ist leer',
+  'smartPlaylist.opIsNotEmpty': 'ist nicht leer',
+  'smartPlaylist.opDaysAgo': 'innerhalb Tagen',
+
+  // Stem Separation
+  'stemSeparation.title': 'Stems trennen',
+  'stemSeparation.trackToSeparate': 'Zu trennender Track',
+  'stemSeparation.needsInstall': 'Demucs nicht installiert',
+  'stemSeparation.installDesc': 'Demucs wird benötigt um Audio in Stems zu trennen. Dies benötigt ca. 2GB Speicherplatz (Python + PyTorch + Demucs).',
+  'stemSeparation.installDemucs': 'Demucs installieren',
+  'stemSeparation.noPython': 'Python nicht gefunden. Bitte installiere Python 3.8+ von python.org und starte die App neu.',
+  'stemSeparation.selectModel': 'Modell wählen',
+  'stemSeparation.model4': '4 Stems (Standard)',
+  'stemSeparation.model6': '6 Stems (Erweitert)',
+  'stemSeparation.installing': 'Demucs wird installiert...',
+  'stemSeparation.separating': 'Audio wird getrennt...',
+  'stemSeparation.importing': 'Stems werden importiert...',
+  'stemSeparation.complete': 'Trennung abgeschlossen!',
+  'stemSeparation.error': 'Fehler bei der Trennung',
+  'stemSeparation.start': 'Trennung starten',
+  'stemSeparation.tryAgain': 'Erneut versuchen',
+  'stemSeparation.selectStems': 'Stems auswählen und benennen',
+  'stemSeparation.importSelected': 'Ausgewählte importieren',
+  'context.separateStems': 'Stems trennen',
 }
 
 const en: typeof de = {
@@ -692,6 +743,9 @@ const en: typeof de = {
   'notes.placeholder': 'Enter note...',
   'notes.altClick': 'Alt+Click for note',
 
+  // Player Visualizer
+  'player.visualizer': 'Visualizer',
+
   // Player FX
   'player.fx': 'FX',
   'player.reverb': 'Reverb',
@@ -718,6 +772,54 @@ const en: typeof de = {
 
   // Settings - AcoustID
   'settings.acoustidApiKey': 'AcoustID API Key',
+
+  // Smart Playlists
+  'smartPlaylist.title': 'Smart Playlists',
+  'smartPlaylist.create': 'Create Smart Playlist',
+  'smartPlaylist.edit': 'Edit',
+  'smartPlaylist.delete': 'Delete',
+  'smartPlaylist.save': 'Save',
+  'smartPlaylist.name': 'Name',
+  'smartPlaylist.namePlaceholder': 'Enter playlist name...',
+  'smartPlaylist.matchMode': 'Match Mode',
+  'smartPlaylist.matchAll': 'All rules (AND)',
+  'smartPlaylist.matchAny': 'Any rule (OR)',
+  'smartPlaylist.rules': 'Rules',
+  'smartPlaylist.addRule': 'Add rule',
+  'smartPlaylist.tracksMatch': '{count} tracks found',
+  'smartPlaylist.playCount': 'Play count',
+  'smartPlaylist.lastPlayed': 'Last played',
+  'smartPlaylist.selectTag': 'Select tag...',
+  'smartPlaylist.daysPlaceholder': 'Days',
+  'smartPlaylist.opEquals': 'equals',
+  'smartPlaylist.opContains': 'contains',
+  'smartPlaylist.opGt': 'greater than',
+  'smartPlaylist.opLt': 'less than',
+  'smartPlaylist.opBetween': 'between',
+  'smartPlaylist.opIsEmpty': 'is empty',
+  'smartPlaylist.opIsNotEmpty': 'is not empty',
+  'smartPlaylist.opDaysAgo': 'within days',
+
+  // Stem Separation
+  'stemSeparation.title': 'Separate Stems',
+  'stemSeparation.trackToSeparate': 'Track to separate',
+  'stemSeparation.needsInstall': 'Demucs not installed',
+  'stemSeparation.installDesc': 'Demucs is required to separate audio into stems. This requires about 2GB of disk space (Python + PyTorch + Demucs).',
+  'stemSeparation.installDemucs': 'Install Demucs',
+  'stemSeparation.noPython': 'Python not found. Please install Python 3.8+ from python.org and restart the app.',
+  'stemSeparation.selectModel': 'Select model',
+  'stemSeparation.model4': '4 Stems (Standard)',
+  'stemSeparation.model6': '6 Stems (Extended)',
+  'stemSeparation.installing': 'Installing Demucs...',
+  'stemSeparation.separating': 'Separating audio...',
+  'stemSeparation.importing': 'Importing stems...',
+  'stemSeparation.complete': 'Separation complete!',
+  'stemSeparation.error': 'Separation failed',
+  'stemSeparation.start': 'Start separation',
+  'stemSeparation.tryAgain': 'Try again',
+  'stemSeparation.selectStems': 'Select and name stems',
+  'stemSeparation.importSelected': 'Import selected',
+  'context.separateStems': 'Separate stems',
 }
 
 export const translations: Record<string, typeof de> = {

@@ -48,6 +48,9 @@ interface PlayerStore {
   compRelease: number       // 0 to 1
   compKnee: number          // 0 to 40
 
+  // Visualizer
+  showVisualizer: boolean
+
   play: (track: Track) => void
   pause: () => void
   playPause: () => void
@@ -88,6 +91,10 @@ interface PlayerStore {
   setCompKnee: (v: number) => void
   resetFx: () => void
 
+  // Visualizer
+  toggleVisualizer: () => void
+  getAnalyserNode: () => AnalyserNode | null
+
   // A-B Loop
   toggleABLoop: () => void
   clearABLoop: () => void
@@ -118,6 +125,7 @@ let _compressorNode: DynamicsCompressorNode | null = null
 let _convolverNode: ConvolverNode | null = null
 let _reverbGainNode: GainNode | null = null  // wet signal
 let _dryGainNode: GainNode | null = null      // dry signal
+let _analyserNode: AnalyserNode | null = null // for visualizer
 
 function ensureAudioContext(): AudioContext {
   if (!_audioContext || _audioContext.state === 'closed') {
@@ -175,15 +183,24 @@ function connectAudioGraph(audio: HTMLAudioElement) {
   if (_convolverNode) try { _convolverNode.disconnect() } catch { /* ok */ }
   if (_reverbGainNode) try { _reverbGainNode.disconnect() } catch { /* ok */ }
   if (_dryGainNode) try { _dryGainNode.disconnect() } catch { /* ok */ }
+  if (_analyserNode) try { _analyserNode.disconnect() } catch { /* ok */ }
+
+  // Create analyser node for visualizer
+  if (!_analyserNode) {
+    _analyserNode = ctx.createAnalyser()
+    _analyserNode.fftSize = 256
+    _analyserNode.smoothingTimeConstant = 0.8
+  }
 
   const state = usePlayerStore.getState()
 
-  // Build chain: source → bass → mid → treble
+  // Build chain: source → bass → mid → treble → analyser
   _sourceNode.connect(_bassFilter)
   _bassFilter.connect(_midFilter)
   _midFilter.connect(_trebleFilter)
+  _trebleFilter.connect(_analyserNode)
 
-  let lastNode: AudioNode = _trebleFilter
+  let lastNode: AudioNode = _analyserNode
 
   // Compressor (optional)
   if (state.compressorEnabled) {
@@ -292,6 +309,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   compAttack: 0.003,
   compRelease: 0.25,
   compKnee: 30,
+  showVisualizer: false,
 
   play: (track) => {
     const { audio: existingAudio, currentTrack, audioBlobUrl } = get()
@@ -569,6 +587,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     })
     rebuildFxChain()
   },
+
+  // Visualizer
+  toggleVisualizer: () => set(s => ({ showVisualizer: !s.showVisualizer })),
+  getAnalyserNode: () => _analyserNode,
 
   // A-B Loop
   toggleABLoop: () => {

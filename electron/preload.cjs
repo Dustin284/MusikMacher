@@ -76,4 +76,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installFpcalc: () => ipcRenderer.invoke('install-fpcalc'),
   generateFingerprint: (trackId) => ipcRenderer.invoke('generate-fingerprint', trackId),
   acoustidLookup: (fingerprint, duration, apiKey) => ipcRenderer.invoke('acoustid-lookup', fingerprint, duration, apiKey),
+
+  // Stem separation (Demucs)
+  checkPython: () => ipcRenderer.invoke('check-python'),
+  checkDemucs: () => ipcRenderer.invoke('check-demucs'),
+  checkCuda: () => ipcRenderer.invoke('check-cuda'),
+  installDemucs: () => ipcRenderer.invoke('install-demucs'),
+  separateStems: (trackId, model) => ipcRenderer.invoke('separate-stems', trackId, model),
+  onDemucsProgress: (cb) => {
+    ipcRenderer.removeAllListeners('demucs-progress')
+    ipcRenderer.on('demucs-progress', (_event, data) => cb(data))
+  },
+  onSeparationProgress: (cb) => {
+    ipcRenderer.removeAllListeners('separation-progress')
+    ipcRenderer.on('separation-progress', (_event, data) => cb(data))
+  },
+
+  // Debug
+  debugBinState: () => ipcRenderer.invoke('debug-bin-state'),
 })
