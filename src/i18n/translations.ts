@@ -324,6 +324,8 @@ const de = {
   'import.fileDetected': 'Neue Datei erkannt: {name}',
   'import.skippedSimilar': 'Übersprungen (ähnlich): {name}',
   'import.skippedNotReadable': 'Übersprungen (nicht lesbar): {name}',
+  'import.progress': 'Importiere {current} / {total} — {name}',
+  'import.scanning': 'Ordner wird gescannt...',
 
   // Notes
   'notes.add': 'Notiz hinzufügen',
@@ -735,6 +737,8 @@ const en: typeof de = {
   'import.fileDetected': 'New file detected: {name}',
   'import.skippedSimilar': 'Skipped (similar): {name}',
   'import.skippedNotReadable': 'Skipped (not readable): {name}',
+  'import.progress': 'Importing {current} / {total} — {name}',
+  'import.scanning': 'Scanning folder...',
 
   // Notes
   'notes.add': 'Add note',

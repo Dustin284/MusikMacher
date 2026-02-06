@@ -13,6 +13,7 @@ interface TrackStore {
   tagSearch: string
   showHidden: boolean
   showHiddenTags: boolean
+  importProgress: { current: number; total: number; currentName: string } | null
 
   setCategory: (cat: number) => void
   setSearchTerm: (term: string) => void
@@ -67,6 +68,7 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
   tagSearch: '',
   showHidden: false,
   showHiddenTags: false,
+  importProgress: null,
 
   setCategory: (cat) => set({ category: cat }),
   setSearchTerm: (term) => set({ searchTerm: term }),
@@ -300,8 +302,12 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
     const audioExts = ['.mp3', '.m4a', '.mp4', '.wav', '.ogg', '.flac', '.webm']
     let added = 0
     let skipped = 0
+    const fileArray = Array.from(files)
+    const total = fileArray.length
 
-    for (const file of Array.from(files)) {
+    for (let i = 0; i < fileArray.length; i++) {
+      const file = fileArray[i]
+      set({ importProgress: { current: i + 1, total, currentName: file.name } })
       const ext = '.' + file.name.split('.').pop()?.toLowerCase()
       if (!audioExts.includes(ext)) {
         skipped++
@@ -384,7 +390,7 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
 
     const tracks = await getTracks(category)
     const tags = await getTags(category)
-    set({ tracks, tags })
+    set({ tracks, tags, importProgress: null })
 
     return log
   },

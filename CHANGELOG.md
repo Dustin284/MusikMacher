@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.4.1
+
+### Verbesserungen
+
+- **Echtzeit-Fortschrittsanzeige beim Import** — Beim Importieren von Dateien oder Ordnern wird jetzt eine Progress-Bar mit aktuellem Dateinamen und Zaehler angezeigt (z.B. "Importiere 5 / 120 — songname.mp3"). Prozentanzeige und animierter Fortschrittsbalken geben visuelles Feedback, besonders bei grossen Ordnern.
+- **Scan-Phase Feedback** — Beim Ordner-Import wird vor dem eigentlichen Import "Ordner wird gescannt..." angezeigt, damit der User weiss, dass die App arbeitet.
+
+---
+
 ## v1.4.0
 
 ### Neue Features

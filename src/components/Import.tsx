@@ -16,6 +16,7 @@ interface ImportProps {
 
 export default function Import({ initialDownloadUrl, onInitialUrlConsumed }: ImportProps = {}) {
   const importTracks = useTrackStore(s => s.importTracks)
+  const importProgress = useTrackStore(s => s.importProgress)
   const { t } = useTranslation()
   const libraries = useLibraryStore(s => s.libraries)
   const [importInto, setImportInto] = useState<number>(CATEGORY_TRACKS)
@@ -125,11 +126,11 @@ export default function Import({ initialDownloadUrl, onInitialUrlConsumed }: Imp
     if (!window.electronAPI?.scanDirectory || !window.electronAPI?.readFile) return
 
     setImporting(true)
-    setLog(t('import.importing'))
+    setLog(t('import.scanning') + '\n')
 
     try {
       const filePaths = await window.electronAPI.scanDirectory(dirPath)
-      setLog(prev => prev + `Found ${filePaths.length} audio files\n`)
+      setLog(t('import.importing') + `Found ${filePaths.length} audio files\n`)
 
       const fileList: File[] = []
       for (const fp of filePaths) {
@@ -330,6 +331,30 @@ export default function Import({ initialDownloadUrl, onInitialUrlConsumed }: Imp
 
       {/* Download panel (YouTube/SoundCloud) */}
       <DownloadPanel category={importInto} initialUrl={initialDownloadUrl} onInitialUrlConsumed={onInitialUrlConsumed} />
+
+      {/* Import progress bar */}
+      {importProgress && (
+        <div className="bg-white/60 dark:bg-surface-800/40 backdrop-blur-sm rounded-xl p-4 border border-surface-200/60 dark:border-surface-800/60">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[13px] text-surface-600 dark:text-surface-400 truncate mr-3">
+              {t('import.progress', {
+                current: importProgress.current,
+                total: importProgress.total,
+                name: importProgress.currentName,
+              })}
+            </span>
+            <span className="text-[13px] font-semibold text-primary-600 dark:text-primary-400 shrink-0">
+              {Math.round((importProgress.current / importProgress.total) * 100)}%
+            </span>
+          </div>
+          <div className="w-full h-2 bg-surface-200 dark:bg-surface-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-primary-400 to-primary-600 rounded-full transition-all duration-200"
+              style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Log output */}
       <div className="flex-1 min-h-[120px] rounded-xl border border-surface-200/60 dark:border-surface-800/60 bg-surface-950/[0.03] dark:bg-surface-950/30 overflow-auto">
