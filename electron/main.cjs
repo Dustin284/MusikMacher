@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, net, Menu, clipboard } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, protocol, net, Menu, clipboard, globalShortcut } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
@@ -582,6 +582,373 @@ ipcMain.handle('download-spotify', async (event, url) => {
     })
   } catch (err) {
     return { success: false, error: err.message }
+  }
+})
+
+// --- Playlist helpers ---
+
+function isPlaylistUrl(url) {
+  if (/youtube\.com\/playlist\?list=|[?&]list=/i.test(url)) return true
+  if (/open\.spotify\.com\/playlist\//i.test(url)) return true
+  if (/soundcloud\.com\/.+\/sets\//i.test(url)) return true
+  return false
+}
+
+// Extract a single track download into a reusable helper
+function downloadSingleTrack(ytdlpPath, url, downloadDir, onProgress) {
+  return new Promise((resolve) => {
+    const outputTemplate = path.join(downloadDir, '%(title)s.%(ext)s')
+    const proc = spawn(ytdlpPath, [
+      '--ffmpeg-location', getBinDir(),
+      '-x',
+      '--audio-format', 'mp3',
+      '--audio-quality', '0',
+      '--embed-metadata',
+      '--embed-thumbnail',
+      '--convert-thumbnails', 'jpg',
+      '-o', outputTemplate,
+      '--newline',
+      '--no-check-certificates',
+      url,
+    ])
+
+    let lastFile = ''
+    let stderrOutput = ''
+
+    proc.stdout.on('data', (data) => {
+      const lines = data.toString().split('\n')
+      for (const line of lines) {
+        const progressMatch = line.match(/\[download\]\s+(\d+\.?\d*)%/)
+        if (progressMatch && onProgress) {
+          onProgress(parseFloat(progressMatch[1]), 'downloading')
+        }
+        if (line.includes('[ExtractAudio]') && onProgress) onProgress(75, 'converting')
+        if (line.includes('[EmbedThumbnail]') && onProgress) onProgress(85, 'thumbnail')
+        if ((line.includes('[Metadata]') || line.includes('[EmbedMetadata]')) && onProgress) onProgress(90, 'metadata')
+
+        const destMatch = line.match(/Destination: (.+)/)
+        if (destMatch) lastFile = destMatch[1].trim()
+        const mergeMatch = line.match(/\[Merger\] Merging formats into "(.+)"/)
+        if (mergeMatch) lastFile = mergeMatch[1].trim()
+        const extractMatch = line.match(/\[ExtractAudio\] Destination: (.+)/)
+        if (extractMatch) lastFile = extractMatch[1].trim()
+      }
+    })
+
+    proc.stderr.on('data', (data) => { stderrOutput += data.toString() })
+
+    proc.on('close', (code) => {
+      if (code === 0 && lastFile && fs.existsSync(lastFile)) {
+        const fileName = path.basename(lastFile)
+        const fileBuffer = fs.readFileSync(lastFile)
+        resolve({
+          success: true,
+          filePath: lastFile,
+          fileName,
+          fileData: fileBuffer.buffer.slice(fileBuffer.byteOffset, fileBuffer.byteOffset + fileBuffer.byteLength),
+        })
+      } else {
+        // Try to find any downloaded mp3
+        try {
+          const files = fs.readdirSync(downloadDir).filter(f => f.endsWith('.mp3'))
+          if (files.length > 0) {
+            const sorted = files
+              .map(f => ({ name: f, time: fs.statSync(path.join(downloadDir, f)).mtimeMs }))
+              .sort((a, b) => b.time - a.time)
+            const foundPath = path.join(downloadDir, sorted[0].name)
+            const fileBuffer = fs.readFileSync(foundPath)
+            resolve({
+              success: true,
+              filePath: foundPath,
+              fileName: sorted[0].name,
+              fileData: fileBuffer.buffer.slice(fileBuffer.byteOffset, fileBuffer.byteOffset + fileBuffer.byteLength),
+            })
+            return
+          }
+        } catch {}
+        const errMsg = stderrOutput.trim().split('\n').pop() || `exit code ${code}`
+        resolve({ success: false, error: errMsg })
+      }
+    })
+
+    proc.on('error', (err) => {
+      resolve({ success: false, error: err.message })
+    })
+
+    // Store the process reference for cancel support
+    resolve._proc = proc
+  })
+}
+
+// Active playlist download process (for cancellation)
+let activePlaylistProc = null
+let playlistCancelled = false
+
+ipcMain.handle('fetch-playlist-info', async (_event, url) => {
+  try {
+    const ytdlpPath = getYtdlpPath()
+
+    // Spotify playlists — use oEmbed for title
+    if (/open\.spotify\.com\/playlist\//i.test(url)) {
+      const cleanUrl = url.replace(/\/intl-[a-z]{2}\//, '/').split('?')[0]
+      const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(cleanUrl)}`
+      const res = await net.fetch(oembedUrl, { headers: { 'User-Agent': GENIUS_UA } })
+      if (!res.ok) return { success: false, error: 'Could not fetch Spotify playlist info' }
+      const data = await res.json()
+      return {
+        success: true,
+        playlist: {
+          title: data.title || 'Spotify Playlist',
+          trackCount: 0, // Can't easily get count from oEmbed
+          platform: 'spotify',
+          tracks: [],
+        }
+      }
+    }
+
+    // YouTube / SoundCloud — use yt-dlp flat-playlist
+    if (!fs.existsSync(ytdlpPath)) return { success: false, error: 'yt-dlp not installed' }
+
+    return new Promise((resolve) => {
+      const proc = spawn(ytdlpPath, [
+        '--flat-playlist',
+        '--dump-json',
+        '--no-check-certificates',
+        url,
+      ])
+
+      let stdout = ''
+      proc.stdout.on('data', (data) => { stdout += data.toString() })
+      proc.stderr.on('data', () => {})
+
+      const timeout = setTimeout(() => { proc.kill(); resolve({ success: false, error: 'Timeout' }) }, 60000)
+
+      proc.on('close', () => {
+        clearTimeout(timeout)
+        if (!stdout.trim()) return resolve({ success: false, error: 'No results' })
+        try {
+          const tracks = stdout.trim().split('\n').filter(Boolean).map(line => {
+            const obj = JSON.parse(line)
+            return {
+              url: obj.url || obj.webpage_url || '',
+              title: obj.title || 'Unknown',
+              duration: obj.duration || 0,
+            }
+          })
+
+          // Try to extract playlist title from the first entry's playlist_title
+          const firstObj = JSON.parse(stdout.trim().split('\n')[0])
+          const playlistTitle = firstObj.playlist_title || firstObj.playlist || 'Playlist'
+          const platform = /soundcloud\.com/i.test(url) ? 'soundcloud' : 'youtube'
+
+          resolve({
+            success: true,
+            playlist: {
+              title: playlistTitle,
+              trackCount: tracks.length,
+              platform,
+              tracks,
+            }
+          })
+        } catch (e) {
+          resolve({ success: false, error: e.message })
+        }
+      })
+
+      proc.on('error', (err) => {
+        clearTimeout(timeout)
+        resolve({ success: false, error: err.message })
+      })
+    })
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
+
+ipcMain.handle('download-playlist', async (event, url) => {
+  try {
+    const ytdlpPath = getYtdlpPath()
+    if (!fs.existsSync(ytdlpPath)) return { success: false, error: 'yt-dlp not installed' }
+
+    if (!hasFfmpeg()) {
+      event.sender.send('playlist-progress', { percent: 0, phase: 'installing', current: 0, total: 0, trackName: '' })
+      const ok = await ensureFfmpeg()
+      if (!ok) return { success: false, error: 'ffmpeg could not be installed' }
+    }
+
+    playlistCancelled = false
+
+    // Step 1: Get track list
+    let tracks = []
+    const isSpotify = /open\.spotify\.com\/playlist\//i.test(url)
+
+    if (isSpotify) {
+      // For Spotify playlists, we need to scrape the embed page for track names
+      const cleanUrl = url.replace(/\/intl-[a-z]{2}\//, '/').split('?')[0]
+      const embedUrl = cleanUrl.replace('open.spotify.com/playlist/', 'open.spotify.com/embed/playlist/')
+      try {
+        const res = await net.fetch(embedUrl, { headers: { 'User-Agent': GENIUS_UA } })
+        const html = await res.text()
+        // Extract track titles from the embed HTML
+        const titleMatches = html.match(/"name":"([^"]+)"/g)
+        if (titleMatches) {
+          const seen = new Set()
+          for (const m of titleMatches) {
+            const name = m.match(/"name":"([^"]+)"/)?.[1]
+            if (name && !seen.has(name) && name.length > 1 && name.length < 200) {
+              seen.add(name)
+              tracks.push({ url: '', title: name, duration: 0 })
+            }
+          }
+          // Remove the first entry as it's usually the playlist name
+          if (tracks.length > 1) tracks.shift()
+        }
+      } catch {}
+
+      if (tracks.length === 0) {
+        return { success: false, error: 'Could not extract tracks from Spotify playlist' }
+      }
+    } else {
+      // YouTube / SoundCloud — use yt-dlp
+      const infoResult = await new Promise((resolve) => {
+        const proc = spawn(ytdlpPath, ['--flat-playlist', '--dump-json', '--no-check-certificates', url])
+        let stdout = ''
+        proc.stdout.on('data', (data) => { stdout += data.toString() })
+        proc.stderr.on('data', () => {})
+        const timeout = setTimeout(() => { proc.kill(); resolve(null) }, 60000)
+        proc.on('close', () => {
+          clearTimeout(timeout)
+          if (!stdout.trim()) return resolve(null)
+          try {
+            resolve(stdout.trim().split('\n').filter(Boolean).map(line => {
+              const obj = JSON.parse(line)
+              return { url: obj.url || obj.webpage_url || '', title: obj.title || 'Unknown', duration: obj.duration || 0 }
+            }))
+          } catch { resolve(null) }
+        })
+        proc.on('error', () => { clearTimeout(timeout); resolve(null) })
+      })
+
+      if (!infoResult || infoResult.length === 0) {
+        return { success: false, error: 'Could not get playlist track list' }
+      }
+      tracks = infoResult
+    }
+
+    const total = tracks.length
+    const results = []
+    const downloadDir = path.join(app.getPath('temp'), 'lorus-playlist-downloads')
+    if (!fs.existsSync(downloadDir)) fs.mkdirSync(downloadDir, { recursive: true })
+
+    // Step 2: Download each track
+    for (let i = 0; i < total; i++) {
+      if (playlistCancelled) break
+
+      const track = tracks[i]
+      const trackName = track.title || `Track ${i + 1}`
+      const overallBase = (i / total) * 100
+      const perTrack = 100 / total
+
+      event.sender.send('playlist-progress', {
+        percent: Math.round(overallBase),
+        phase: 'downloading',
+        current: i + 1,
+        total,
+        trackName,
+      })
+
+      // Determine download URL
+      let downloadUrl = track.url
+      if (isSpotify || !downloadUrl) {
+        downloadUrl = `ytsearch1:${trackName}`
+      }
+
+      try {
+        const result = await new Promise((resolve) => {
+          const outputTemplate = path.join(downloadDir, '%(title)s.%(ext)s')
+          const proc = spawn(ytdlpPath, [
+            '--ffmpeg-location', getBinDir(),
+            '-x', '--audio-format', 'mp3', '--audio-quality', '0',
+            '--embed-metadata', '--embed-thumbnail', '--convert-thumbnails', 'jpg',
+            '-o', outputTemplate, '--newline', '--no-check-certificates',
+            downloadUrl,
+          ])
+
+          activePlaylistProc = proc
+          let lastFile = ''
+          let stderrOutput = ''
+
+          proc.stdout.on('data', (data) => {
+            const lines = data.toString().split('\n')
+            for (const line of lines) {
+              const progressMatch = line.match(/\[download\]\s+(\d+\.?\d*)%/)
+              if (progressMatch) {
+                const raw = parseFloat(progressMatch[1])
+                event.sender.send('playlist-progress', {
+                  percent: Math.round(overallBase + (raw / 100) * perTrack * 0.7),
+                  phase: 'downloading',
+                  current: i + 1,
+                  total,
+                  trackName,
+                })
+              }
+              const destMatch = line.match(/Destination: (.+)/)
+              if (destMatch) lastFile = destMatch[1].trim()
+              const extractMatch = line.match(/\[ExtractAudio\] Destination: (.+)/)
+              if (extractMatch) lastFile = extractMatch[1].trim()
+            }
+          })
+
+          proc.stderr.on('data', (data) => { stderrOutput += data.toString() })
+
+          proc.on('close', (code) => {
+            activePlaylistProc = null
+            if (code === 0 && lastFile && fs.existsSync(lastFile)) {
+              const fileName = path.basename(lastFile)
+              const fileBuffer = fs.readFileSync(lastFile)
+              resolve({
+                success: true,
+                filePath: lastFile,
+                fileName,
+                fileData: fileBuffer.buffer.slice(fileBuffer.byteOffset, fileBuffer.byteOffset + fileBuffer.byteLength),
+              })
+            } else {
+              resolve({ success: false, error: stderrOutput.trim().split('\n').pop() || `exit code ${code}` })
+            }
+          })
+
+          proc.on('error', (err) => {
+            activePlaylistProc = null
+            resolve({ success: false, error: err.message })
+          })
+        })
+
+        if (result.success) {
+          results.push(result)
+          // Send track immediately so renderer can import it right away
+          event.sender.send('playlist-track-ready', {
+            fileName: result.fileName,
+            fileData: result.fileData,
+            filePath: result.filePath || '',
+          })
+        }
+      } catch (err) {
+        console.error(`[Playlist] Failed to download track ${i + 1}:`, err.message)
+      }
+    }
+
+    event.sender.send('playlist-progress', { percent: 100, phase: 'done', current: total, total, trackName: '' })
+    return { success: true, results }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
+
+ipcMain.handle('cancel-playlist-download', async () => {
+  playlistCancelled = true
+  if (activePlaylistProc) {
+    try { activePlaylistProc.kill() } catch {}
+    activePlaylistProc = null
   }
 })
 
@@ -2084,6 +2451,66 @@ function showClipboardNotification(url, platform, title, thumbnailUrl) {
 
 app.setAppUserModelId('com.lorus.musikmacher')
 
+// --- OBS / Streaming Integration ---
+const obsServer = require('./obsServer.cjs')
+let obsRunning = false
+let obsSettings = {}
+
+ipcMain.handle('obs-start-server', async (_event, port) => {
+  try {
+    if (obsRunning) obsServer.stop()
+    await obsServer.start(port || 7878)
+    obsRunning = true
+    return { success: true }
+  } catch (err) {
+    obsRunning = false
+    return { success: false, error: err.message }
+  }
+})
+
+ipcMain.handle('obs-stop-server', async () => {
+  try {
+    obsServer.stop()
+    obsRunning = false
+  } catch {}
+})
+
+ipcMain.on('obs-now-playing', (_event, data) => {
+  if (obsRunning) {
+    obsServer.updateNowPlaying(data)
+  }
+
+  // Text file export
+  if (obsSettings.obsTextFileEnabled && obsSettings.obsTextFilePath) {
+    try {
+      let format = obsSettings.obsTextFormat || '{artist} - {title}'
+      const text = format
+        .replace(/\{artist\}/g, data.artist || '')
+        .replace(/\{title\}/g, data.title || '')
+        .replace(/\{bpm\}/g, data.bpm ? String(data.bpm) : '')
+        .replace(/\{key\}/g, data.key || '')
+      fs.writeFileSync(obsSettings.obsTextFilePath, text, 'utf8')
+    } catch {}
+  }
+})
+
+ipcMain.on('obs-update-settings', (_event, settings) => {
+  obsSettings = { ...obsSettings, ...settings }
+  if (obsRunning) {
+    obsServer.updateSettings(settings)
+  }
+})
+
+ipcMain.handle('obs-select-text-file-path', async () => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Text file path',
+    defaultPath: 'now-playing.txt',
+    filters: [{ name: 'Text Files', extensions: ['txt'] }],
+  })
+  if (result.canceled || !result.filePath) return null
+  return result.filePath
+})
+
 app.whenReady().then(() => {
   // Stream audio directly from disk cache — no IPC buffer transfer
   // Manual Range request handling (net.fetch + file:// doesn't support Range)
@@ -2138,6 +2565,16 @@ app.whenReady().then(() => {
 
   createWindow()
 
+  // Register global media key shortcuts (work even when app is in background)
+  const mediaKeys = ['MediaPlayPause', 'MediaNextTrack', 'MediaPreviousTrack', 'MediaStop']
+  for (const key of mediaKeys) {
+    globalShortcut.register(key, () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('media-key', key)
+      }
+    })
+  }
+
   if (!isDev) {
     setupAutoUpdater()
   }
@@ -2188,6 +2625,8 @@ app.on('window-all-closed', () => {
 
 // Clean up temp files on quit
 app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
+
   // Close all file watchers
   for (const [, watcher] of activeWatchers) {
     try { watcher.close() } catch {}

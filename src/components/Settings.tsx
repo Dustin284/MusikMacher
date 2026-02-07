@@ -29,6 +29,8 @@ const SHORTCUT_ACTIONS: { action: string; labelKey: string }[] = [
   { action: 'toggleFavorite', labelKey: 'shortcut.toggleFavorite' },
   { action: 'undo', labelKey: 'shortcut.undo' },
   { action: 'redo', labelKey: 'shortcut.redo' },
+  { action: 'nextTrack', labelKey: 'shortcut.nextTrack' },
+  { action: 'previousTrack', labelKey: 'shortcut.previousTrack' },
 ]
 for (let i = 1; i <= 9; i++) {
   SHORTCUT_ACTIONS.push({ action: `cue${i}`, labelKey: `shortcut.cue` })
@@ -56,6 +58,9 @@ export default function Settings() {
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'none' | 'error'>('idle')
   const [updateInfo, setUpdateInfo] = useState<{ version?: string; url?: string } | null>(null)
   const [exportImportStatus, setExportImportStatus] = useState<'idle' | 'exported' | 'imported' | 'error'>('idle')
+  const [obsError, setObsError] = useState<string | null>(null)
+  const [showTutorial, setShowTutorial] = useState(false)
+  const [urlCopied, setUrlCopied] = useState(false)
 
   const themes = [
     { value: 'dark' as const, label: t('settings.themeDark'), icon: 'M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z' },
@@ -242,6 +247,218 @@ export default function Settings() {
                 <span className="text-[13px] text-red-500">{t('settings.updateError')}</span>
               )}
             </div>
+          </div>
+        </Section>
+
+        {/* Streaming / OBS */}
+        <Section title={t('obs.title')} icon="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z">
+          <div className="flex flex-col gap-4">
+            <Toggle label={t('obs.enable')} checked={settings.obsEnabled ?? false} onChange={async (v) => {
+              update({ obsEnabled: v })
+              if (v) {
+                try {
+                  const result = await window.electronAPI?.obsStartServer?.(settings.obsPort ?? 7878)
+                  if (result && !result.success) setObsError(result.error || 'Unknown error')
+                  else setObsError(null)
+                } catch (e: any) { setObsError(e.message) }
+              } else {
+                window.electronAPI?.obsStopServer?.()
+                setObsError(null)
+              }
+              // Send current settings to server
+              window.electronAPI?.obsUpdateSettings?.({
+                obsOverlayTheme: settings.obsOverlayTheme ?? 'modern',
+                obsShowCover: settings.obsShowCover ?? true,
+                obsShowBpm: settings.obsShowBpm ?? true,
+                obsShowKey: settings.obsShowKey ?? true,
+                obsShowProgress: settings.obsShowProgress ?? true,
+                obsShowTime: settings.obsShowTime ?? true,
+                obsOverlayWidth: settings.obsOverlayWidth ?? 400,
+                obsOverlayHeight: settings.obsOverlayHeight ?? 120,
+              })
+            }} />
+
+            {(settings.obsEnabled) && (
+              <span className="text-[12px] text-green-500 font-medium">
+                {t('obs.serverRunning', { port: String(settings.obsPort ?? 7878) })}
+              </span>
+            )}
+            {obsError && (
+              <span className="text-[12px] text-red-500 font-medium">
+                {t('obs.serverError', { error: obsError })}
+              </span>
+            )}
+
+            <div>
+              <label className="text-[13px] text-surface-600 dark:text-surface-400 mb-1.5 block">{t('obs.port')}</label>
+              <input
+                type="number"
+                value={settings.obsPort ?? 7878}
+                onChange={(e) => update({ obsPort: parseInt(e.target.value) || 7878 })}
+                className="w-24 px-3 py-2 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all font-mono"
+              />
+            </div>
+
+            <SelectField
+              value={settings.obsOverlayTheme ?? 'modern'}
+              options={[
+                { value: 'modern' as const, label: t('obs.themeModern') },
+                { value: 'minimal' as const, label: t('obs.themeMinimal') },
+                { value: 'ticker' as const, label: t('obs.themeTicker') },
+                { value: 'banner' as const, label: t('obs.themeBanner') },
+              ]}
+              onChange={(v) => {
+                update({ obsOverlayTheme: v })
+                window.electronAPI?.obsUpdateSettings?.({ obsOverlayTheme: v })
+              }}
+            />
+
+            <Toggle label={t('obs.showCover')} checked={settings.obsShowCover ?? true} onChange={(v) => {
+              update({ obsShowCover: v })
+              window.electronAPI?.obsUpdateSettings?.({ obsShowCover: v })
+            }} />
+            <Toggle label={t('obs.showBpm')} checked={settings.obsShowBpm ?? true} onChange={(v) => {
+              update({ obsShowBpm: v })
+              window.electronAPI?.obsUpdateSettings?.({ obsShowBpm: v })
+            }} />
+            <Toggle label={t('obs.showKey')} checked={settings.obsShowKey ?? true} onChange={(v) => {
+              update({ obsShowKey: v })
+              window.electronAPI?.obsUpdateSettings?.({ obsShowKey: v })
+            }} />
+            <Toggle label={t('obs.showProgress')} checked={settings.obsShowProgress ?? true} onChange={(v) => {
+              update({ obsShowProgress: v })
+              window.electronAPI?.obsUpdateSettings?.({ obsShowProgress: v })
+            }} />
+            <Toggle label={t('obs.showTime')} checked={settings.obsShowTime ?? true} onChange={(v) => {
+              update({ obsShowTime: v })
+              window.electronAPI?.obsUpdateSettings?.({ obsShowTime: v })
+            }} />
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[13px] text-surface-600 dark:text-surface-400 mb-1.5 block">{t('obs.overlayWidth')}</label>
+                <input
+                  type="number"
+                  value={settings.obsOverlayWidth ?? 400}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value) || 400
+                    update({ obsOverlayWidth: v })
+                    window.electronAPI?.obsUpdateSettings?.({ obsOverlayWidth: v })
+                  }}
+                  className="w-full px-3 py-2 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-[13px] text-surface-600 dark:text-surface-400 mb-1.5 block">{t('obs.overlayHeight')}</label>
+                <input
+                  type="number"
+                  value={settings.obsOverlayHeight ?? 120}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value) || 120
+                    update({ obsOverlayHeight: v })
+                    window.electronAPI?.obsUpdateSettings?.({ obsOverlayHeight: v })
+                  }}
+                  className="w-full px-3 py-2 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all font-mono"
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={() => window.electronAPI?.openExternal?.(`http://localhost:${settings.obsPort ?? 7878}/overlay`)}
+              className="px-3 py-1.5 text-[13px] font-medium rounded-lg bg-primary-500 hover:bg-primary-600 text-white transition-colors self-start"
+            >
+              {t('obs.preview')}
+            </button>
+
+            {/* Tutorial */}
+            <button
+              onClick={() => setShowTutorial(!showTutorial)}
+              className="text-[13px] text-primary-500 hover:text-primary-600 font-medium self-start transition-colors flex items-center gap-1.5"
+            >
+              <svg className={`w-3.5 h-3.5 transition-transform ${showTutorial ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              {t('obs.tutorialToggle')}
+            </button>
+
+            {showTutorial && (
+              <div className="bg-surface-100/80 dark:bg-surface-900/60 rounded-lg p-4 text-[13px] text-surface-600 dark:text-surface-400 flex flex-col gap-2.5 border border-surface-200/60 dark:border-surface-700/40">
+                <h4 className="text-[12px] font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider">{t('obs.tutorial')}</h4>
+                <p>{t('obs.tutorialStep1')}</p>
+                <p>{t('obs.tutorialStep2', { port: String(settings.obsPort ?? 7878) })}</p>
+                <p>{t('obs.tutorialStep3')}</p>
+                <p>{t('obs.tutorialStep4')}</p>
+                <p>{t('obs.tutorialStep5')}</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 px-3 py-1.5 bg-surface-200/80 dark:bg-surface-800/80 rounded-md font-mono text-[12px] text-primary-600 dark:text-primary-400 select-all">
+                    {`http://localhost:${settings.obsPort ?? 7878}/overlay`}
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(`http://localhost:${settings.obsPort ?? 7878}/overlay`)
+                      setUrlCopied(true)
+                      setTimeout(() => setUrlCopied(false), 2000)
+                    }}
+                    className="px-2 py-1.5 text-[11px] font-medium rounded-md border border-primary-500 text-primary-500 hover:bg-primary-500/10 transition-colors whitespace-nowrap"
+                  >
+                    {urlCopied ? t('obs.urlCopied') : t('obs.copyUrl')}
+                  </button>
+                </div>
+                <p>{t('obs.tutorialStep6')}</p>
+                <p>{t('obs.tutorialStep7')}</p>
+                <p className="text-primary-500 dark:text-primary-400 font-medium mt-1">{t('obs.tutorialTip')}</p>
+              </div>
+            )}
+
+            {/* Divider */}
+            <hr className="border-surface-200/60 dark:border-surface-700/60" />
+
+            {/* Text file export */}
+            <h4 className="text-[12px] font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider">{t('obs.textFile')}</h4>
+            <Toggle label={t('obs.textFileEnable')} checked={settings.obsTextFileEnabled ?? false} onChange={(v) => {
+              update({ obsTextFileEnabled: v })
+              window.electronAPI?.obsUpdateSettings?.({ obsTextFileEnabled: v })
+            }} />
+
+            {(settings.obsTextFileEnabled) && (
+              <>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={settings.obsTextFilePath || ''}
+                    readOnly
+                    placeholder={t('obs.textFilePath')}
+                    className="flex-1 px-3 py-2 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 text-surface-500 font-mono truncate"
+                  />
+                  <button
+                    onClick={async () => {
+                      const filePath = await window.electronAPI?.obsSelectTextFilePath?.()
+                      if (filePath) {
+                        update({ obsTextFilePath: filePath })
+                        window.electronAPI?.obsUpdateSettings?.({ obsTextFilePath: filePath })
+                      }
+                    }}
+                    className="px-3 py-2 text-[12px] font-medium rounded-lg border border-primary-500 text-primary-500 hover:bg-primary-500/10 transition-colors whitespace-nowrap"
+                  >
+                    {t('obs.textFileSelect')}
+                  </button>
+                </div>
+
+                <div>
+                  <label className="text-[13px] text-surface-600 dark:text-surface-400 mb-1.5 block">{t('obs.textFormat')}</label>
+                  <input
+                    type="text"
+                    value={settings.obsTextFormat || '{artist} - {title}'}
+                    onChange={(e) => {
+                      update({ obsTextFormat: e.target.value })
+                      window.electronAPI?.obsUpdateSettings?.({ obsTextFormat: e.target.value })
+                    }}
+                    className="w-full px-3 py-2 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all font-mono"
+                  />
+                  <p className="text-[11px] text-surface-400 mt-1">{t('obs.textFormatHint')}</p>
+                </div>
+              </>
+            )}
           </div>
         </Section>
 

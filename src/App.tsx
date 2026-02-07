@@ -5,6 +5,7 @@ import { useLibraryStore } from './store/useLibraryStore'
 import { useProjectStore } from './store/useProjectStore'
 import { useTranslation } from './i18n/useTranslation'
 import { CATEGORY_TRACKS, CATEGORY_EFFECTS, DEFAULT_SHORTCUTS } from './types'
+import { usePlayerStore } from './store/usePlayerStore'
 import Browse from './components/Browse'
 import Statistics from './components/Statistics'
 import Import from './components/Import'
@@ -149,12 +150,71 @@ export default function App() {
     }
   }, [])
 
+  // Global media key handler (works even when app is in background)
+  useEffect(() => {
+    if (!window.electronAPI?.onMediaKey) return
+    window.electronAPI.onMediaKey((key) => {
+      const store = usePlayerStore.getState()
+      switch (key) {
+        case 'MediaPlayPause':
+          store.playPause()
+          break
+        case 'MediaNextTrack': {
+          const { trackList, currentTrack, playbackMode } = store
+          if (trackList.length > 0 && currentTrack) {
+            if (playbackMode === 'shuffle') {
+              const others = trackList.filter(t => t.id !== currentTrack.id)
+              if (others.length > 0) store.play(others[Math.floor(Math.random() * others.length)])
+            } else {
+              const idx = trackList.findIndex(t => t.id === currentTrack.id)
+              if (idx >= 0 && idx < trackList.length - 1) store.play(trackList[idx + 1])
+              else if (trackList.length > 0) store.play(trackList[0])
+            }
+          }
+          break
+        }
+        case 'MediaPreviousTrack': {
+          const { trackList: tl, currentTrack: ct } = store
+          if (tl.length > 0 && ct) {
+            const idx = tl.findIndex(t => t.id === ct.id)
+            if (idx > 0) store.play(tl[idx - 1])
+            else if (tl.length > 0) store.play(tl[tl.length - 1])
+          }
+          break
+        }
+        case 'MediaStop':
+          store.stop()
+          break
+      }
+    })
+  }, [])
+
   // Ensure default libraries exist on first load with empty DB
   useEffect(() => {
     if (librariesLoaded && libraries.length === 0) {
       addLib('Songs').then(() => addLib('Effekte'))
     }
   }, [librariesLoaded])
+
+  // Auto-start OBS server if enabled
+  useEffect(() => {
+    if (!loaded) return
+    if (settings.obsEnabled && window.electronAPI?.obsStartServer) {
+      window.electronAPI.obsStartServer(settings.obsPort ?? 7878).then(() => {
+        // Send overlay settings to server after it has started
+        window.electronAPI?.obsUpdateSettings?.({
+          obsOverlayTheme: settings.obsOverlayTheme ?? 'modern',
+          obsShowCover: settings.obsShowCover ?? true,
+          obsShowBpm: settings.obsShowBpm ?? true,
+          obsShowKey: settings.obsShowKey ?? true,
+          obsShowProgress: settings.obsShowProgress ?? true,
+          obsShowTime: settings.obsShowTime ?? true,
+          obsOverlayWidth: settings.obsOverlayWidth ?? 400,
+          obsOverlayHeight: settings.obsOverlayHeight ?? 120,
+        })
+      }).catch(() => {})
+    }
+  }, [loaded])
 
   // Check GitHub releases on startup
   useEffect(() => {

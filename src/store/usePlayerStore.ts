@@ -3,7 +3,9 @@ import type { Track, CuePoint, QueueItem } from '../types'
 import { getAudioBlob, updateTrack, incrementPlayCount } from '../db/database'
 import { useSettingsStore } from './useSettingsStore'
 import { useTrackStore } from './useTrackStore'
-import { detectBPM, detectKey, computeWaveformPeaks } from '../utils/audioAnalysis'
+import { detectBPM, detectKey, computeWaveformPeaks, getCamelotCompatible, cosineSimilarity } from '../utils/audioAnalysis'
+
+export type PlaybackMode = 'sequential' | 'shuffle' | 'smartDj'
 
 interface ABLoop {
   a: number
@@ -50,6 +52,10 @@ interface PlayerStore {
 
   // Visualizer
   showVisualizer: boolean
+
+  // Continue playback (auto-next)
+  trackList: Track[]
+  playbackMode: PlaybackMode
 
   play: (track: Track) => void
   pause: () => void
@@ -110,6 +116,10 @@ interface PlayerStore {
   setCuePoint: (slot: number) => void
   jumpToCuePoint: (slot: number) => void
   deleteCuePoint: (slot: number) => void
+
+  // Continue playback
+  setTrackList: (tracks: Track[]) => void
+  setPlaybackMode: (mode: PlaybackMode) => void
 }
 
 let positionInterval: ReturnType<typeof setInterval> | null = null
@@ -280,6 +290,58 @@ function generateImpulseResponse(ctx: AudioContext, roomSize: 'small' | 'medium'
   return impulse
 }
 
+/**
+ * Smart DJ: pick the best next track based on BPM proximity,
+ * Camelot key compatibility, and audio feature similarity.
+ */
+function pickSmartNext(current: Track, candidates: Track[]): Track | null {
+  if (candidates.length === 0) return null
+  if (candidates.length === 1) return candidates[0]
+
+  const compatibleKeys = current.musicalKey ? getCamelotCompatible(current.musicalKey) : []
+
+  let bestTrack: Track | null = null
+  let bestScore = -Infinity
+
+  for (const t of candidates) {
+    if (t.id === current.id) continue
+    let score = 0
+
+    // BPM proximity (0–40 pts): closer BPM = higher score
+    if (current.bpm && t.bpm) {
+      const bpmDiff = Math.abs(current.bpm - t.bpm)
+      score += Math.max(0, 40 - bpmDiff * 2)
+    }
+
+    // Key compatibility (0–30 pts)
+    if (t.musicalKey && compatibleKeys.length > 0) {
+      if (t.musicalKey === current.musicalKey) score += 30
+      else if (compatibleKeys.includes(t.musicalKey)) score += 20
+    }
+
+    // Audio feature similarity (0–20 pts)
+    if (current.audioFeatures && t.audioFeatures &&
+        current.audioFeatures.length > 0 && t.audioFeatures.length > 0) {
+      score += cosineSimilarity(current.audioFeatures, t.audioFeatures) * 20
+    }
+
+    // Energy proximity (0–10 pts)
+    if (current.energy && t.energy) {
+      score += Math.max(0, 10 - Math.abs(current.energy - t.energy) * 2)
+    }
+
+    // Small random jitter to avoid always picking the same track
+    score += Math.random() * 3
+
+    if (score > bestScore) {
+      bestScore = score
+      bestTrack = t
+    }
+  }
+
+  return bestTrack
+}
+
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
   currentTrack: null,
   isPlaying: false,
@@ -310,6 +372,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   compRelease: 0.25,
   compKnee: 30,
   showVisualizer: false,
+  trackList: [],
+  playbackMode: 'sequential' as PlaybackMode,
 
   play: (track) => {
     const { audio: existingAudio, currentTrack, audioBlobUrl } = get()
@@ -640,6 +704,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   toggleQueue: () => set(s => ({ showQueue: !s.showQueue })),
+
+  setTrackList: (tracks) => set({ trackList: tracks }),
+  setPlaybackMode: (mode) => set({ playbackMode: mode }),
 }))
 
 function fadeOutAndCleanup(audio: HTMLAudioElement, duration: number, blobUrl: string | null) {
@@ -720,10 +787,35 @@ async function loadAndPlayTrack(trackId: number, track: Track) {
   audio.onended = () => {
     usePlayerStore.setState({ isPlaying: false, position: 0 })
     stopPositionUpdate()
-    // Auto-play next from queue
-    const { queue } = usePlayerStore.getState()
+    // Auto-play next from queue first
+    const { queue, trackList, playbackMode } = usePlayerStore.getState()
     if (queue.length > 0) {
       setTimeout(() => usePlayerStore.getState().playNext(), 100)
+    } else if (trackList.length > 0) {
+      const currentId = trackId
+      let nextTrack: Track | null = null
+
+      if (playbackMode === 'shuffle') {
+        // Shuffle: pick a random track (excluding current)
+        const others = trackList.filter(t => t.id !== currentId)
+        if (others.length > 0) {
+          nextTrack = others[Math.floor(Math.random() * others.length)]
+        }
+      } else if (playbackMode === 'smartDj') {
+        // Smart DJ: pick best match by BPM, key, features
+        const others = trackList.filter(t => t.id !== currentId)
+        nextTrack = pickSmartNext(track, others)
+      } else {
+        // Sequential: next in list
+        const idx = trackList.findIndex(t => t.id === currentId)
+        if (idx >= 0 && idx < trackList.length - 1) {
+          nextTrack = trackList[idx + 1]
+        }
+      }
+
+      if (nextTrack) {
+        setTimeout(() => usePlayerStore.getState().play(nextTrack!), 100)
+      }
     }
   }
 
@@ -800,4 +892,74 @@ function stopPositionUpdate() {
     positionInterval = null
   }
 }
+
+// --- OBS Now-Playing subscription ---
+
+let _obsLastTrackId: number | null = null
+let _obsLastPlaying: boolean | null = null
+let _obsPosInterval: ReturnType<typeof setInterval> | null = null
+
+async function blobToBase64(input: Blob | ArrayBuffer): Promise<string> {
+  // Legacy tracks may have ArrayBuffer stored instead of Blob
+  const blob = input instanceof Blob ? input : new Blob([input])
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const result = reader.result as string
+      resolve(result.split(',')[1] || '')
+    }
+    reader.onerror = () => resolve('')
+    reader.readAsDataURL(blob)
+  })
+}
+
+async function sendNowPlaying(state: { currentTrack: Track | null; isPlaying: boolean; position: number; duration: number }) {
+  if (!window.electronAPI?.obsUpdateNowPlaying) return
+  const track = state.currentTrack
+  let cover: string | null = null
+
+  if (track?.artworkBlob) {
+    try { cover = await blobToBase64(track.artworkBlob) } catch { /* ok */ }
+  }
+
+  window.electronAPI.obsUpdateNowPlaying({
+    title: track?.name || '',
+    artist: track?.artist || '',
+    cover,
+    bpm: track?.bpm || null,
+    key: track?.musicalKey || null,
+    isPlaying: state.isPlaying,
+    position: state.position,
+    duration: state.duration,
+  })
+}
+
+usePlayerStore.subscribe((state) => {
+  const trackId = state.currentTrack?.id ?? null
+  if (trackId !== _obsLastTrackId || state.isPlaying !== _obsLastPlaying) {
+    _obsLastTrackId = trackId
+    _obsLastPlaying = state.isPlaying
+    sendNowPlaying(state)
+
+    // Start/stop position update interval for OBS progress bar
+    if (_obsPosInterval) { clearInterval(_obsPosInterval); _obsPosInterval = null }
+    if (state.isPlaying && state.currentTrack) {
+      _obsPosInterval = setInterval(() => {
+        const s = usePlayerStore.getState()
+        if (s.isPlaying && window.electronAPI?.obsUpdateNowPlaying) {
+          window.electronAPI.obsUpdateNowPlaying({
+            title: s.currentTrack?.name || '',
+            artist: s.currentTrack?.artist || '',
+            cover: null, // don't re-send cover for position updates
+            bpm: s.currentTrack?.bpm || null,
+            key: s.currentTrack?.musicalKey || null,
+            isPlaying: true,
+            position: s.position,
+            duration: s.duration,
+          })
+        }
+      }, 1000)
+    }
+  }
+})
 

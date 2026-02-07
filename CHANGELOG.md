@@ -1,5 +1,60 @@
 # Changelog
 
+## v1.6.0
+
+### Neue Features
+
+- **Wiedergabe-Modi (Spotify-Style)** — Drei Wiedergabe-Modi im Player, umschaltbar per Button neben den Play-Controls:
+  - **Reihenfolge**: Spielt die Trackliste sequentiell ab
+  - **Shuffle**: Zufaellige Wiedergabe (kein Track wird direkt wiederholt)
+  - **Smart DJ**: Waehlt automatisch den besten naechsten Track basierend auf BPM-Naehe (bis 40 Punkte), Camelot-Key-Kompatibilitaet (bis 30 Punkte), Audio-Feature-Aehnlichkeit per Cosine Similarity (bis 20 Punkte) und Energy-Level-Naehe (bis 10 Punkte). Kleiner Zufallsfaktor verhindert Wiederholungen.
+- **Playlist-Download** — Ganze Playlists von YouTube, Spotify und SoundCloud herunterladen:
+  - Automatische Erkennung von Playlist-URLs im Download-Panel
+  - Playlist-Info wird vorab abgerufen (Titel, Anzahl Tracks)
+  - Fortschrittsanzeige pro Track ("Track 3/15 — Downloading: Song Name...")
+  - Abbruch-Funktion waehrend des Downloads
+  - Automatische BPM/Tonart-Analyse nach Download jedes Tracks
+  - Spotify-Tracks werden ueber YouTube-Suche (`ytsearch1:`) aufgeloest
+  - **Live-Import** — Tracks erscheinen sofort in der Bibliothek waehrend des Downloads (nicht erst nach Abschluss aller Tracks)
+- **OBS / Streaming-Integration** — Aktuellen Track in OBS als Browser Source anzeigen:
+  - Eingebauter HTTP + SSE-Server (Standard-Port 7878, konfigurierbar)
+  - 4 Overlay-Themes: **Modern** (Karte mit Cover, Titel, BPM, Tonart), **Minimal** (kompakte Leiste), **Ticker** (Laufschrift am unteren Rand), **Banner (Streaming)** (Spotify/Apple Music-Stil mit unscharfem Cover-Hintergrund)
+  - Echtzeit-Updates per Server-Sent Events (Track-Wechsel, Fortschritt, Zeitanzeige)
+  - Zeitanzeige: Abgelaufene Zeit / Gesamtdauer / Restzeit im Overlay
+  - Konfigurierbare Overlay-Groesse (Breite und Hoehe in Pixeln)
+  - Transparenter Hintergrund fuer OBS Browser Source
+  - CSS-Animationen bei Track-Wechsel (Slide-in, Marquee, Fade-in)
+  - Text-Datei Export mit konfigurierbarem Format (`{artist}`, `{title}`, `{bpm}`, `{key}`)
+  - Konfigurierbar: Cover, BPM, Tonart, Fortschrittsbalken, Zeitanzeige einzeln ein-/ausblendbar
+  - Vorschau-Button oeffnet Overlay im Browser
+  - Automatischer Server-Start beim App-Start (wenn aktiviert)
+  - Eingebautes Setup-Tutorial mit kopierbarer URL
+- **Auto-Next / Wiedergabe fortsetzen** — Naechster Track wird automatisch abgespielt wenn ein Song endet. Funktioniert mit allen drei Wiedergabe-Modi.
+- **Globale Media-Keys** — Play/Pause, Naechster Track, Vorheriger Track und Stop funktionieren auch wenn die App im Hintergrund laeuft (MediaPlayPause, MediaNextTrack, MediaPreviousTrack, MediaStop)
+- **Track umbenennen** — Per Doppelklick auf den Tracknamen in der Tabelle kann der Name direkt bearbeitet werden (Enter zum Speichern, Escape zum Abbrechen)
+- **Automatische Titel-Bereinigung** — Beim Download wird der Kuenstlername automatisch aus dem Dateinamen entfernt, wenn er in den ID3-Metadaten vorhanden ist (z.B. "Sean Paul - Get Busy.mp3" wird zu "Get Busy.mp3"). Unterstuetzte Trennzeichen: ` - `, ` – `, ` — `, ` _ `
+- **Hotkeys: Naechster/Vorheriger Track** — Neue Tastenkuerzel N (naechster Track) und P (vorheriger Track) zum Ueberspringen von Songs
+
+### Bugfixes
+
+- **Cover-Art fehlte im OBS-Overlay** — `blobToBase64()` konnte ArrayBuffer aus der Datenbank nicht verarbeiten. Ausserdem ueberschrieben Positions-Updates das Cover mit `null`. Beides behoben.
+- **Auto-Next funktionierte nicht** — War hinter der `continuePlayback`-Einstellung versteckt, die standardmaessig deaktiviert war. Gate entfernt, Auto-Next funktioniert jetzt immer wenn eine Trackliste vorhanden ist.
+
+### Technische Aenderungen
+
+- Neuer Zustand-Store `usePlaylistProgress` fuer Playlist-Download-Fortschritt (vermeidet IPC/useState-Rerender-Bug)
+- Neues Modul `electron/obsServer.cjs` — HTTP + SSE-Server (Server-Sent Events statt WebSocket fuer maximale Kompatibilitaet)
+- `usePlayerStore` erweitert um `playbackMode`, `trackList`, `setTrackList`, `setPlaybackMode`
+- `TrackGrid.tsx` setzt automatisch die `trackList` beim Abspielen, Track-Name per Doppelklick editierbar
+- `pickSmartNext()` Algorithmus mit gewichtetem Multi-Faktor-Scoring
+- OBS-Einstellungen werden live per SSE an verbundene Overlays gepusht
+- Positions-Update-Intervall von 3s auf 1s reduziert fuer fluessigere Fortschrittsanzeige
+- Electron `globalShortcut` fuer systemweite Media-Key-Registrierung
+- Neue Preload-APIs: `fetchPlaylistInfo`, `downloadPlaylist`, `cancelPlaylistDownload`, `onPlaylistProgress`, `onPlaylistTrackReady`, `onMediaKey`, `obsStartServer`, `obsStopServer`, `obsUpdateNowPlaying`, `obsUpdateSettings`, `obsSelectTextFilePath`
+- `blobToBase64()` verarbeitet jetzt sowohl Blob als auch ArrayBuffer (Legacy-Daten)
+
+---
+
 ## v1.5.0
 
 ### Neue Features

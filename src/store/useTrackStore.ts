@@ -52,6 +52,7 @@ interface TrackStore {
 
   updateTrackEnergy: (id: number, energy: number) => Promise<void>
   updateTrackAudioFeatures: (id: number, audioFeatures: number[]) => Promise<void>
+  updateTrackName: (id: number, name: string) => Promise<void>
   updateTrackArtist: (id: number, artist: string) => Promise<void>
   updateTrackAlbum: (id: number, album: string) => Promise<void>
   updateTrackYear: (id: number, year: string) => Promise<void>
@@ -310,6 +311,12 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
     updateTrack(id, { audioFeatures })
   },
 
+  updateTrackName: async (id, name) => {
+    const { tracks } = get()
+    set({ tracks: tracks.map(t => t.id === id ? { ...t, name } : t) })
+    updateTrack(id, { name })
+  },
+
   updateTrackArtist: async (id, artist) => {
     const { tracks } = get()
     set({ tracks: tracks.map(t => t.id === id ? { ...t, artist } : t) })
@@ -494,7 +501,7 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
 
       const artworkBlob = await extractArtwork(file)
       if (artworkBlob) {
-        trackData.artworkBlob = await artworkBlob.arrayBuffer() as unknown as Blob
+        trackData.artworkBlob = artworkBlob
       }
 
       const meta = await extractID3Metadata(file)
@@ -547,11 +554,33 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
 
     const artworkBlob = await extractArtwork(file)
     if (artworkBlob) {
-      trackData.artworkBlob = await artworkBlob.arrayBuffer() as unknown as Blob
+      trackData.artworkBlob = artworkBlob
     }
 
     const meta = await extractID3Metadata(file)
-    if (meta.artist) trackData.artist = meta.artist
+    if (meta.artist) {
+      trackData.artist = meta.artist
+      // Clean up title: remove artist prefix (e.g., "Sean Paul - Get Busy.mp3" → "Get Busy.mp3")
+      const nameNoExt = trackData.name.replace(/\.[^.]+$/, '')
+      const ext = trackData.name.slice(nameNoExt.length)
+      // Try common separators: " - ", " – ", " — ", " _ "
+      for (const sep of [' - ', ' – ', ' — ', ' _ ']) {
+        const idx = nameNoExt.indexOf(sep)
+        if (idx >= 0) {
+          const before = nameNoExt.slice(0, idx).trim()
+          const after = nameNoExt.slice(idx + sep.length).trim()
+          // Check if the part before or after the separator matches the artist
+          if (before.toLowerCase() === meta.artist.toLowerCase()) {
+            trackData.name = after + ext
+            break
+          }
+          if (after.toLowerCase() === meta.artist.toLowerCase()) {
+            trackData.name = before + ext
+            break
+          }
+        }
+      }
+    }
     if (meta.album) trackData.album = meta.album
     if (meta.year) trackData.year = meta.year
     if (meta.trackNumber) trackData.trackNumber = meta.trackNumber

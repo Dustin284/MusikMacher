@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useTranslation } from '../i18n/useTranslation'
 import { useTrackStore } from '../store/useTrackStore'
+import { usePlaylistProgress } from '../store/usePlaylistProgress'
 import { log } from '../utils/logger'
-import type { SearchResult } from '../types'
+import type { SearchResult, PlaylistInfo } from '../types'
 
 interface DownloadPanelProps {
   category: number
@@ -10,7 +11,7 @@ interface DownloadPanelProps {
   onInitialUrlConsumed?: () => void
 }
 
-type DownloadStatus = 'idle' | 'downloading' | 'installing' | 'success' | 'error'
+type DownloadStatus = 'idle' | 'downloading' | 'installing' | 'success' | 'error' | 'playlist-downloading'
 
 function detectPlatform(url: string): 'youtube' | 'soundcloud' | 'spotify' | null {
   if (/youtube\.com|youtu\.be/i.test(url)) return 'youtube'
@@ -21,6 +22,13 @@ function detectPlatform(url: string): 'youtube' | 'soundcloud' | 'spotify' | nul
 
 function isUrl(text: string): boolean {
   return detectPlatform(text.trim()) !== null
+}
+
+function isPlaylistUrl(url: string): boolean {
+  if (/youtube\.com\/playlist\?list=|[?&]list=/i.test(url)) return true
+  if (/open\.spotify\.com\/playlist\//i.test(url)) return true
+  if (/soundcloud\.com\/.+\/sets\//i.test(url)) return true
+  return false
 }
 
 export default function DownloadPanel({ category, initialUrl, onInitialUrlConsumed }: DownloadPanelProps) {
@@ -35,6 +43,11 @@ export default function DownloadPanel({ category, initialUrl, onInitialUrlConsum
   const [phase, setPhase] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
 
+  // Playlist state
+  const [playlistInfo, setPlaylistInfo] = useState<PlaylistInfo | null>(null)
+  const [fetchingPlaylist, setFetchingPlaylist] = useState(false)
+  const plProgress = usePlaylistProgress(s => s)
+
   // Search state
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
@@ -48,14 +61,37 @@ export default function DownloadPanel({ category, initialUrl, onInitialUrlConsum
     if (initialUrl) {
       setInput(initialUrl)
       onInitialUrlConsumed?.()
-      setTimeout(() => handleDownload(initialUrl), 50)
+      // Don't auto-start for playlists — let user see info first
+      if (!isPlaylistUrl(initialUrl)) {
+        setTimeout(() => handleDownload(initialUrl), 50)
+      }
     }
   }, [initialUrl])
 
   const isElectron = typeof window !== 'undefined' && !!window.electronAPI
   const platform = useMemo(() => detectPlatform(input), [input])
   const inputIsUrl = useMemo(() => isUrl(input), [input])
-  const isDownloading = status === 'downloading' || status === 'installing'
+  const isPlaylist = useMemo(() => isPlaylistUrl(input), [input])
+  const isDownloading = status === 'downloading' || status === 'installing' || status === 'playlist-downloading'
+
+  // Auto-detect playlist and fetch info
+  useEffect(() => {
+    if (!isElectron || !window.electronAPI?.fetchPlaylistInfo) return
+
+    if (isPlaylist && input.trim()) {
+      setFetchingPlaylist(true)
+      setPlaylistInfo(null)
+      window.electronAPI.fetchPlaylistInfo(input.trim()).then(result => {
+        if (result.success && result.playlist) {
+          setPlaylistInfo(result.playlist)
+        }
+        setFetchingPlaylist(false)
+      }).catch(() => setFetchingPlaylist(false))
+    } else {
+      setPlaylistInfo(null)
+      setFetchingPlaylist(false)
+    }
+  }, [input, isPlaylist])
 
   // Debounced auto-search
   useEffect(() => {
@@ -79,6 +115,36 @@ export default function DownloadPanel({ category, initialUrl, onInitialUrlConsum
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
   }, [input])
+
+  // Register playlist progress listener (uses Zustand store to avoid IPC/useState bug)
+  useEffect(() => {
+    if (!window.electronAPI?.onPlaylistProgress) return
+    window.electronAPI.onPlaylistProgress((data) => {
+      usePlaylistProgress.setState(data)
+    })
+  }, [])
+
+  // Import each playlist track immediately as it finishes downloading
+  const playlistImportCountRef = useRef(0)
+  useEffect(() => {
+    if (!window.electronAPI?.onPlaylistTrackReady) return
+    window.electronAPI.onPlaylistTrackReady(async (data) => {
+      if (data.fileData && data.fileName) {
+        try {
+          const { trackId } = await importDownloadedTrack(
+            data.fileData,
+            data.fileName,
+            data.filePath || '',
+            category
+          )
+          if (trackId) {
+            playlistImportCountRef.current++
+            analyzeTrack(trackId).catch(() => {})
+          }
+        } catch { /* skip failed import */ }
+      }
+    })
+  }, [category])
 
   const getPhaseText = (p: string) => {
     switch (p) {
@@ -175,6 +241,60 @@ export default function DownloadPanel({ category, initialUrl, onInitialUrlConsum
     }
   }
 
+  const handlePlaylistDownload = async () => {
+    const downloadUrl = input.trim()
+    if (!downloadUrl || !isElectron || !window.electronAPI?.downloadPlaylist) return
+
+    setStatus('playlist-downloading')
+    setErrorMessage('')
+    setSearchResults([])
+    usePlaylistProgress.getState().reset()
+    playlistImportCountRef.current = 0
+
+    try {
+      log('info', 'Starting playlist download', { url: downloadUrl })
+
+      if (window.electronAPI.checkYtdlp) {
+        const hasYtdlp = await window.electronAPI.checkYtdlp()
+        if (!hasYtdlp && window.electronAPI.installYtdlp) {
+          await window.electronAPI.installYtdlp()
+        }
+      }
+
+      const result = await window.electronAPI.downloadPlaylist(downloadUrl)
+
+      if (result.success) {
+        // Tracks are already imported live via onPlaylistTrackReady
+        const importedCount = playlistImportCountRef.current
+
+        setStatus('success')
+        setErrorMessage(t('playlist.complete', { count: String(importedCount) }))
+        log('info', 'Playlist download completed', { url: downloadUrl, imported: String(importedCount) })
+
+        setTimeout(() => {
+          setStatus('idle')
+          setInput('')
+          setErrorMessage('')
+          setPlaylistInfo(null)
+          usePlaylistProgress.getState().reset()
+        }, 3000)
+      } else {
+        throw new Error(result.error || 'Unknown error')
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      setStatus('error')
+      setErrorMessage(message)
+      log('error', 'Playlist download failed', { url: downloadUrl, error: message })
+    }
+  }
+
+  const handleCancelPlaylist = () => {
+    window.electronAPI?.cancelPlaylistDownload?.()
+    setStatus('idle')
+    usePlaylistProgress.getState().reset()
+  }
+
   const handleSearch = async (query: string) => {
     if (!isElectron || !window.electronAPI?.searchAudio) return
 
@@ -257,8 +377,8 @@ export default function DownloadPanel({ category, initialUrl, onInitialUrlConsum
           />
         </div>
 
-        {/* Download button — only show for URLs */}
-        {inputIsUrl && (
+        {/* Download button — only show for non-playlist URLs */}
+        {inputIsUrl && !isPlaylist && (
           <button
             onClick={() => handleDownload()}
             disabled={!input.trim() || !platform || isDownloading}
@@ -269,8 +389,77 @@ export default function DownloadPanel({ category, initialUrl, onInitialUrlConsum
         )}
       </div>
 
-      {/* Progress bar */}
-      {isDownloading && (
+      {/* Playlist info card */}
+      {isPlaylist && !isDownloading && (
+        <div className="mb-3">
+          {fetchingPlaylist ? (
+            <div className="flex items-center gap-2 text-surface-500 text-[13px] py-2">
+              <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              {t('playlist.fetchingInfo')}
+            </div>
+          ) : playlistInfo ? (
+            <div className="flex items-center justify-between p-3 rounded-lg bg-primary-500/10 border border-primary-500/20">
+              <div className="flex items-center gap-2 min-w-0">
+                <svg className="w-5 h-5 text-primary-500 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" />
+                </svg>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-medium text-surface-800 dark:text-surface-200 truncate">
+                    {playlistInfo.title}
+                  </p>
+                  {playlistInfo.trackCount > 0 && (
+                    <p className="text-[11px] text-surface-500">
+                      {t('playlist.detected', { count: String(playlistInfo.trackCount) })}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={handlePlaylistDownload}
+                className="px-4 py-2 text-[13px] font-medium rounded-lg bg-primary-500 hover:bg-primary-600 text-white shadow-sm shadow-primary-500/20 transition-all active:scale-[0.98] shrink-0 ml-3"
+              >
+                {t('playlist.downloadAll')}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {/* Playlist download progress */}
+      {status === 'playlist-downloading' && (
+        <div className="mb-3">
+          <div className="h-1.5 rounded-full bg-surface-200 dark:bg-surface-700 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-primary-500 transition-all duration-500 ease-out"
+              style={{ width: `${Math.max(plProgress.percent, 2)}%` }}
+            />
+          </div>
+          <div className="flex items-center justify-between mt-1.5">
+            <p className="text-[11px] text-surface-500">
+              {plProgress.total > 0
+                ? t('playlist.downloading', {
+                    current: String(plProgress.current),
+                    total: String(plProgress.total),
+                    name: plProgress.trackName,
+                  })
+                : t('download.downloading')
+              }
+            </p>
+            <button
+              onClick={handleCancelPlaylist}
+              className="text-[11px] text-red-500 hover:text-red-600 font-medium transition-colors"
+            >
+              {t('playlist.cancel')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Single track progress bar */}
+      {(status === 'downloading' || status === 'installing') && (
         <div className="mb-3">
           <div className="h-1.5 rounded-full bg-surface-200 dark:bg-surface-700 overflow-hidden">
             <div
@@ -290,7 +479,7 @@ export default function DownloadPanel({ category, initialUrl, onInitialUrlConsum
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          {t('download.success')}
+          {errorMessage || t('download.success')}
         </div>
       )}
 

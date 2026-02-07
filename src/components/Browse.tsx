@@ -93,6 +93,7 @@ export default function Browse({ category, isActive }: BrowseProps) {
         const trackStore = useTrackStore.getState()
         const filtered = trackStore.getFilteredTracks(settings.andTagCombination)
         if (filtered.length > 0) {
+          store.setTrackList(filtered)
           const randomTrack = filtered[Math.floor(Math.random() * filtered.length)]
           store.play(randomTrack)
         }
@@ -102,6 +103,29 @@ export default function Browse({ category, isActive }: BrowseProps) {
         const ct = store.currentTrack
         if (ct?.id) {
           useTrackStore.getState().toggleFavorite(ct.id)
+        }
+        break
+      }
+      case 'nextTrack': {
+        const { trackList, currentTrack, playbackMode } = store
+        if (trackList.length > 0 && currentTrack) {
+          if (playbackMode === 'shuffle') {
+            const others = trackList.filter(t => t.id !== currentTrack.id)
+            if (others.length > 0) store.play(others[Math.floor(Math.random() * others.length)])
+          } else {
+            const idx = trackList.findIndex(t => t.id === currentTrack.id)
+            if (idx >= 0 && idx < trackList.length - 1) store.play(trackList[idx + 1])
+            else if (trackList.length > 0) store.play(trackList[0])
+          }
+        }
+        break
+      }
+      case 'previousTrack': {
+        const { trackList: tl, currentTrack: ct } = store
+        if (tl.length > 0 && ct) {
+          const idx = tl.findIndex(t => t.id === ct.id)
+          if (idx > 0) store.play(tl[idx - 1])
+          else if (tl.length > 0) store.play(tl[tl.length - 1])
         }
         break
       }

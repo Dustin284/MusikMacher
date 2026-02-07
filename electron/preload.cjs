@@ -80,6 +80,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
   generateFingerprint: (trackId) => ipcRenderer.invoke('generate-fingerprint', trackId),
   acoustidLookup: (fingerprint, duration, apiKey) => ipcRenderer.invoke('acoustid-lookup', fingerprint, duration, apiKey),
 
+  // Playlist download
+  fetchPlaylistInfo: (url) => ipcRenderer.invoke('fetch-playlist-info', url),
+  downloadPlaylist: (url) => ipcRenderer.invoke('download-playlist', url),
+  cancelPlaylistDownload: () => ipcRenderer.invoke('cancel-playlist-download'),
+  onPlaylistProgress: (cb) => {
+    ipcRenderer.removeAllListeners('playlist-progress')
+    ipcRenderer.on('playlist-progress', (_event, data) => cb(data))
+  },
+  onPlaylistTrackReady: (cb) => {
+    ipcRenderer.removeAllListeners('playlist-track-ready')
+    ipcRenderer.on('playlist-track-ready', (_event, data) => cb(data))
+  },
+
+  // Global media keys (work in background)
+  onMediaKey: (cb) => ipcRenderer.on('media-key', (_event, key) => cb(key)),
+
+  // OBS / Streaming
+  obsStartServer: (port) => ipcRenderer.invoke('obs-start-server', port),
+  obsStopServer: () => ipcRenderer.invoke('obs-stop-server'),
+  obsUpdateNowPlaying: (data) => ipcRenderer.send('obs-now-playing', data),
+  obsUpdateSettings: (settings) => ipcRenderer.send('obs-update-settings', settings),
+  obsSelectTextFilePath: () => ipcRenderer.invoke('obs-select-text-file-path'),
+
   // Stem separation (Demucs)
   checkPython: () => ipcRenderer.invoke('check-python'),
   checkDemucs: () => ipcRenderer.invoke('check-demucs'),

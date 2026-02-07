@@ -1,6 +1,6 @@
 import { memo, useState, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { usePlayerStore } from '../store/usePlayerStore'
+import { usePlayerStore, type PlaybackMode } from '../store/usePlayerStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { useTrackStore } from '../store/useTrackStore'
 import { useTranslation } from '../i18n/useTranslation'
@@ -199,6 +199,8 @@ export default function Player() {
   const showVisualizer = usePlayerStore(s => s.showVisualizer)
   const toggleVisualizer = usePlayerStore(s => s.toggleVisualizer)
   const getAnalyserNode = usePlayerStore(s => s.getAnalyserNode)
+  const playbackMode = usePlayerStore(s => s.playbackMode)
+  const setPlaybackMode = usePlayerStore(s => s.setPlaybackMode)
 
   const [showEqPanel, setShowEqPanel] = useState(false)
   const [eqPanelPos, setEqPanelPos] = useState({ bottom: 0, left: 0 })
@@ -417,6 +419,49 @@ export default function Player() {
 
           {/* Controls */}
           <div className="flex items-center gap-1.5">
+            {/* Playback mode buttons */}
+            {(['sequential', 'shuffle', 'smartDj'] as PlaybackMode[]).map((mode) => {
+              const active = playbackMode === mode
+              const titles = {
+                sequential: t('playbackMode.sequential'),
+                shuffle: t('playbackMode.shuffle'),
+                smartDj: t('playbackMode.smartDj'),
+              }
+              const icons = {
+                sequential: (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                ),
+                shuffle: (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" />
+                  </svg>
+                ),
+                smartDj: (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+                  </svg>
+                ),
+              }
+              return (
+                <button
+                  key={mode}
+                  onClick={() => setPlaybackMode(mode)}
+                  title={titles[mode]}
+                  className={`p-1 rounded-md transition-all duration-150 ${
+                    active
+                      ? 'text-primary-500 bg-primary-500/10'
+                      : 'text-surface-400 hover:text-surface-600 dark:hover:text-surface-300 hover:bg-surface-200/60 dark:hover:bg-surface-800/60'
+                  }`}
+                >
+                  {icons[mode]}
+                </button>
+              )
+            })}
+
+            <div className="w-px h-4 bg-surface-200/60 dark:bg-surface-700/60 mx-0.5" />
+
             {/* Skip backward */}
             <button
               onClick={() => skipBackward(settings.skipPositionMovement)}

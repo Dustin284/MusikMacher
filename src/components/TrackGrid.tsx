@@ -41,6 +41,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
   const updateTrackCuePoints = useTrackStore(s => s.updateTrackCuePoints)
   const updateTrackEnergy = useTrackStore(s => s.updateTrackEnergy)
   const updateTrackAudioFeatures = useTrackStore(s => s.updateTrackAudioFeatures)
+  const updateTrackName = useTrackStore(s => s.updateTrackName)
   const updateTrackArtist = useTrackStore(s => s.updateTrackArtist)
   const updateTrackAlbum = useTrackStore(s => s.updateTrackAlbum)
   const updateTrackYear = useTrackStore(s => s.updateTrackYear)
@@ -58,7 +59,8 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
   const projects = useProjectStore(s => s.projects)
   const { playlists, activePlaylistId, evaluatePlaylist } = useSmartPlaylistStore()
   const activePlaylist = playlists.find(p => p.id === activePlaylistId)
-  const play = usePlayerStore(s => s.play)
+  const _play = usePlayerStore(s => s.play)
+  const setTrackList = usePlayerStore(s => s.setTrackList)
   const addToQueue = usePlayerStore(s => s.addToQueue)
   const currentTrackId = usePlayerStore(s => s.currentTrack?.id)
   const isPlaying = usePlayerStore(s => s.isPlaying)
@@ -67,6 +69,8 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
   const [sortField, setSortField] = useState<SortField>('name')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [selectedIndex, setSelectedIndex] = useState<number>(-1)
+  const [editingNameId, setEditingNameId] = useState<number | null>(null)
+  const [editingName, setEditingName] = useState('')
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
   const [editingComment, setEditingComment] = useState('')
   const [editingArtistId, setEditingArtistId] = useState<number | null>(null)
@@ -161,6 +165,12 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
     return sorted
   }, [filteredTracks, sortField, sortDir, duplicateIds])
 
+  // Wrapper: set track list for continue-playback before playing
+  const play = useCallback((track: Track) => {
+    setTrackList(sortedTracks)
+    _play(track)
+  }, [_play, setTrackList, sortedTracks])
+
   const handleSort = (field: SortField) => {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortField(field); setSortDir('asc') }
@@ -232,6 +242,16 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
   const endRow = Math.min(sortedTracks.length, Math.ceil((scrollTop + viewHeight) / ROW_HEIGHT) + OVERSCAN)
   const padTop = startRow * ROW_HEIGHT
   const padBottom = Math.max(0, (sortedTracks.length - endRow) * ROW_HEIGHT)
+
+  const startEditName = (track: Track) => {
+    setEditingNameId(track.id!)
+    setEditingName(track.name)
+  }
+
+  const finishEditName = () => {
+    if (editingNameId !== null && editingName.trim()) updateTrackName(editingNameId, editingName.trim())
+    setEditingNameId(null)
+  }
 
   const startEditComment = (track: Track) => {
     setEditingCommentId(track.id!)
@@ -837,13 +857,15 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
                 const isCurrent = currentTrackId === track.id
                 const isBatchSelected = selectedTrackIds.has(track.id!)
 
+                const isEditing = editingNameId === track.id || editingArtistId === track.id || editingAlbumId === track.id || editingYearId === track.id || editingCommentId === track.id
+
                 return (
                   <tr
                     key={track.id}
                     data-index={idx}
-                    draggable
-                    onMouseDown={() => handleTrackMouseDown(track)}
-                    onDragStart={(e) => handleDragStart(e, track)}
+                    draggable={!isEditing}
+                    onMouseDown={() => { if (!isEditing) handleTrackMouseDown(track) }}
+                    onDragStart={(e) => { if (isEditing) { e.preventDefault(); return } handleDragStart(e, track) }}
                     onDragEnd={handleDragEnd}
                     className={`group/row border-b border-surface-100/60 dark:border-surface-800/40 cursor-pointer transition-all duration-100 ${
                       isBatchSelected
@@ -869,7 +891,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
                     </td>
 
                     {/* Name */}
-                    <td className="px-2.5 py-1.5 truncate max-w-[300px]">
+                    <td className="px-2.5 py-1.5 truncate max-w-[300px]" onMouseDown={(e) => { if (editingNameId === track.id) e.stopPropagation() }} onDragStart={(e) => { if (editingNameId === track.id) e.preventDefault() }}>
                       <span className="flex items-center gap-2">
                         {isCurrent && isPlaying && (
                           <span className="flex items-end gap-[2px] h-3 w-3 shrink-0">
@@ -887,9 +909,28 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
                             <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                           </svg>
                         </button>
-                        <span className={isCurrent ? 'text-primary-600 dark:text-primary-400 font-semibold' : ''}>
-                          {track.name}
-                        </span>
+                        {editingNameId === track.id ? (
+                          <input
+                            type="text"
+                            value={editingName}
+                            onChange={(e) => setEditingName(e.target.value)}
+                            onBlur={finishEditName}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') finishEditName()
+                              if (e.key === 'Escape') setEditingNameId(null)
+                            }}
+                            autoFocus
+                            className="flex-1 px-1.5 py-0.5 text-[13px] rounded-md border-2 border-primary-500 bg-white dark:bg-surface-800 focus:outline-none"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        ) : (
+                          <span
+                            className={`cursor-text ${isCurrent ? 'text-primary-600 dark:text-primary-400 font-semibold' : ''}`}
+                            onDoubleClick={(e) => { e.stopPropagation(); startEditName(track) }}
+                          >
+                            {track.name}
+                          </span>
+                        )}
                       </span>
                     </td>
 

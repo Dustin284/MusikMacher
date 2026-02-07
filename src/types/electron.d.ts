@@ -88,6 +88,40 @@ export interface ElectronAPI {
   generateFingerprint?: (trackId: number) => Promise<{ fingerprint: string; duration: number } | null>
   acoustidLookup?: (fingerprint: string, duration: number, apiKey: string) => Promise<{ title: string | null; artist: string | null; score: number } | null>
 
+  // Playlist download
+  fetchPlaylistInfo?: (url: string) => Promise<{
+    success: boolean
+    playlist?: import('./index').PlaylistInfo
+    error?: string
+  }>
+  downloadPlaylist?: (url: string) => Promise<{
+    success: boolean
+    results?: { fileName: string; fileData: ArrayBuffer; filePath: string }[]
+    error?: string
+  }>
+  cancelPlaylistDownload?: () => Promise<void>
+  onPlaylistProgress?: (cb: (data: { percent: number; phase: string; current: number; total: number; trackName: string }) => void) => void
+  onPlaylistTrackReady?: (cb: (data: { fileName: string; fileData: ArrayBuffer; filePath: string }) => void) => void
+
+  // Global media keys (work in background)
+  onMediaKey?: (cb: (key: string) => void) => void
+
+  // OBS / Streaming
+  obsStartServer?: (port: number) => Promise<{ success: boolean; error?: string }>
+  obsStopServer?: () => Promise<void>
+  obsUpdateNowPlaying?: (data: {
+    title: string
+    artist: string
+    bpm?: number | null
+    key?: string | null
+    cover?: string | null
+    duration: number
+    position: number
+    isPlaying: boolean
+  }) => void
+  obsUpdateSettings?: (settings: Partial<import('./index').AppSettings>) => void
+  obsSelectTextFilePath?: () => Promise<string | null>
+
   // Stem separation (Demucs)
   checkPython?: () => Promise<boolean>
   checkDemucs?: () => Promise<boolean>

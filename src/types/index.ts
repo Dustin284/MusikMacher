@@ -1,3 +1,17 @@
+// --- Playlist Info ---
+export interface PlaylistTrackInfo {
+  url: string
+  title: string
+  duration?: number
+}
+
+export interface PlaylistInfo {
+  title: string
+  trackCount: number
+  platform: 'youtube' | 'soundcloud' | 'spotify'
+  tracks: PlaylistTrackInfo[]
+}
+
 // --- Search Results ---
 export interface SearchResult {
   id: string
@@ -186,6 +200,21 @@ export interface AppSettings {
 
   // AcoustID
   acoustidApiKey?: string
+
+  // OBS / Streaming
+  obsEnabled?: boolean
+  obsPort?: number
+  obsTextFileEnabled?: boolean
+  obsTextFilePath?: string
+  obsTextFormat?: string
+  obsOverlayTheme?: 'modern' | 'minimal' | 'ticker' | 'banner'
+  obsShowCover?: boolean
+  obsShowBpm?: boolean
+  obsShowKey?: boolean
+  obsShowProgress?: boolean
+  obsOverlayWidth?: number
+  obsOverlayHeight?: number
+  obsShowTime?: boolean
 }
 
 export const DEFAULT_SHORTCUTS: KeyboardShortcut[] = [
@@ -218,6 +247,8 @@ export const DEFAULT_SHORTCUTS: KeyboardShortcut[] = [
   { action: 'toggleFavorite', key: 'F' },
   { action: 'undo', key: 'Ctrl+Z' },
   { action: 'redo', key: 'Ctrl+Shift+Z' },
+  { action: 'nextTrack', key: 'N' },
+  { action: 'previousTrack', key: 'P' },
 ]
 
 export const DEFAULT_VISIBLE_COLUMNS = ['name', 'duration', 'bpm', 'key', 'rating', 'tags', 'comment']
