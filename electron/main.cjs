@@ -3,7 +3,7 @@ const path = require('path')
 const fs = require('fs')
 const os = require('os')
 const { pathToFileURL } = require('url')
-const { spawn, execSync } = require('child_process')
+const { spawn, execSync, execFile } = require('child_process')
 
 const isDev = !app.isPackaged
 
@@ -1587,10 +1587,14 @@ ipcMain.handle('check-demucs', async () => {
 })
 
 // Detect CUDA/GPU — called once at startup and after demucs install
+// Returns a Promise so the main process is never blocked
 function detectCudaInfo() {
-  if (!hasEmbeddedPython()) return { available: false, reason: 'Python not installed' }
+  return new Promise((resolve) => {
+    if (!hasEmbeddedPython()) {
+      resolve({ available: false, reason: 'Python not installed' })
+      return
+    }
 
-  try {
     const pythonPath = getEmbeddedPythonPath()
 
     // Write check script to temp file to avoid Windows cmd quoting/syntax issues
@@ -1605,43 +1609,44 @@ function detectCudaInfo() {
       "print('device_name:', torch.cuda.get_device_name(0) if cuda else 'N/A')",
     ].join('\n'), 'utf8')
 
-    const result = execSync(
-      `"${pythonPath}" "${scriptPath}"`,
-      { encoding: 'utf8', timeout: 30000 }
-    ).trim()
+    execFile(pythonPath, [scriptPath], { encoding: 'utf8', timeout: 30000 }, (err, stdout) => {
+      try { fs.unlinkSync(scriptPath) } catch {}
 
-    try { fs.unlinkSync(scriptPath) } catch {}
-
-    console.log('[CUDA Check]', result)
-
-    // Parse the output (use indexOf to handle values containing ': ')
-    const lines = result.split('\n')
-    const info = {}
-    for (const line of lines) {
-      const idx = line.indexOf(': ')
-      if (idx > 0) {
-        info[line.substring(0, idx).trim()] = line.substring(idx + 2).trim()
+      if (err) {
+        console.error('[CUDA Check Error]', err.message)
+        resolve({ available: false, reason: err.message })
+        return
       }
-    }
 
-    const available = info['cuda_available'] === 'True'
-    return {
-      available,
-      device: available ? info['device_name'] : null,
-      torchVersion: info['torch_version'],
-      cudaVersion: info['cuda_version'],
-      reason: available ? null : `CUDA not available (torch ${info['torch_version']}, cuda ${info['cuda_version']})`
-    }
-  } catch (e) {
-    console.error('[CUDA Check Error]', e.message)
-    return { available: false, reason: e.message }
-  }
+      const result = (stdout || '').trim()
+      console.log('[CUDA Check]', result)
+
+      // Parse the output (use indexOf to handle values containing ': ')
+      const lines = result.split('\n')
+      const info = {}
+      for (const line of lines) {
+        const idx = line.indexOf(': ')
+        if (idx > 0) {
+          info[line.substring(0, idx).trim()] = line.substring(idx + 2).trim()
+        }
+      }
+
+      const available = info['cuda_available'] === 'True'
+      resolve({
+        available,
+        device: available ? info['device_name'] : null,
+        torchVersion: info['torch_version'],
+        cudaVersion: info['cuda_version'],
+        reason: available ? null : `CUDA not available (torch ${info['torch_version']}, cuda ${info['cuda_version']})`
+      })
+    })
+  })
 }
 
 // Check if CUDA/GPU is available — returns cached result (populated at app start)
 ipcMain.handle('check-cuda', async () => {
   if (cachedCudaInfo) return cachedCudaInfo
-  cachedCudaInfo = detectCudaInfo()
+  cachedCudaInfo = await detectCudaInfo()
   return cachedCudaInfo
 })
 
@@ -2580,10 +2585,10 @@ app.whenReady().then(() => {
   }
 
   // Pre-cache GPU/CUDA detection in background so stem separation doesn't wait
-  setTimeout(() => {
+  setTimeout(async () => {
     if (hasEmbeddedPython()) {
       console.log('[Startup] Detecting GPU/CUDA...')
-      cachedCudaInfo = detectCudaInfo()
+      cachedCudaInfo = await detectCudaInfo()
       console.log('[Startup] GPU cached:', cachedCudaInfo?.available ? cachedCudaInfo.device : 'not available')
     }
   }, 3000)

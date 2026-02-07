@@ -557,25 +557,24 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
       trackData.artworkBlob = artworkBlob
     }
 
+    // Remove file extension from name (e.g., "Get Busy.mp3" → "Get Busy")
+    trackData.name = trackData.name.replace(/\.(mp3|wav|m4a|ogg|flac|webm|opus|aac|wma)$/i, '')
+
     const meta = await extractID3Metadata(file)
     if (meta.artist) {
       trackData.artist = meta.artist
-      // Clean up title: remove artist prefix (e.g., "Sean Paul - Get Busy.mp3" → "Get Busy.mp3")
-      const nameNoExt = trackData.name.replace(/\.[^.]+$/, '')
-      const ext = trackData.name.slice(nameNoExt.length)
-      // Try common separators: " - ", " – ", " — ", " _ "
+      // Clean up title: remove artist prefix (e.g., "Sean Paul - Get Busy" → "Get Busy")
       for (const sep of [' - ', ' – ', ' — ', ' _ ']) {
-        const idx = nameNoExt.indexOf(sep)
+        const idx = trackData.name.indexOf(sep)
         if (idx >= 0) {
-          const before = nameNoExt.slice(0, idx).trim()
-          const after = nameNoExt.slice(idx + sep.length).trim()
-          // Check if the part before or after the separator matches the artist
+          const before = trackData.name.slice(0, idx).trim()
+          const after = trackData.name.slice(idx + sep.length).trim()
           if (before.toLowerCase() === meta.artist.toLowerCase()) {
-            trackData.name = after + ext
+            trackData.name = after
             break
           }
           if (after.toLowerCase() === meta.artist.toLowerCase()) {
-            trackData.name = before + ext
+            trackData.name = before
             break
           }
         }

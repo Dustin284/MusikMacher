@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.6.1
+
+### Verbesserungen
+
+- **Dateiendung aus Tracknamen entfernt** — Beim Download wird die Dateiendung (.mp3, .wav, .m4a, .ogg, .flac, .webm, .opus, .aac, .wma) automatisch aus dem Tracknamen entfernt. Zusammen mit der Kuenstler-Bereinigung wird z.B. "Sean Paul - Get Busy.mp3" zu "Get Busy".
+
+---
+
 ## v1.6.0
 
 ### Neue Features
