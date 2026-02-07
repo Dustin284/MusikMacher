@@ -5,6 +5,13 @@
 ### Verbesserungen
 
 - **Dateiendung aus Tracknamen entfernt** — Beim Download wird die Dateiendung (.mp3, .wav, .m4a, .ogg, .flac, .webm, .opus, .aac, .wma) automatisch aus dem Tracknamen entfernt. Zusammen mit der Kuenstler-Bereinigung wird z.B. "Sean Paul - Get Busy.mp3" zu "Get Busy".
+- **Crossfade funktioniert jetzt** — Crossfade wird automatisch ausgeloest wenn ein Song von alleine endet (Position-Timer startet naechsten Track vor Songende). Manuelles Skippen wechselt sofort ohne Fade. Alte Audio wird ueber Web Audio API direkt an den Output geroutet, damit der Fade-Out hoerbar bleibt waehrend der neue Track startet.
+
+### Bugfixes
+
+- **App fror beim Start ein** — GPU/CUDA-Erkennung nutzte `execSync` (blockierend, bis zu 30s Timeout), wodurch der Electron-Main-Process komplett eingefroren war. Auf asynchrones `execFile` umgestellt — App startet jetzt sofort.
+- **Crossfade bei Auto-Next funktionierte nicht** — `audio.onended` feuert erst nach Songende, da gibt es nichts zum Ueberblenden. Crossfade wird jetzt per Position-Timer ausgeloest wenn die Restzeit unter die Crossfade-Dauer faellt.
+- **Crossfade machte alten Track sofort stumm** — `connectAudioGraph()` hat die alte Web-Audio-Source disconnected bevor der Fade-Out hoerbar war. Alte Source wird jetzt direkt an `AudioContext.destination` geroutet fuer den Fade.
 
 ---
 

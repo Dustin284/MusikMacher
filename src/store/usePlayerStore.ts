@@ -123,6 +123,7 @@ interface PlayerStore {
 }
 
 let positionInterval: ReturnType<typeof setInterval> | null = null
+let crossfadeTriggered = false
 
 // Internal Web Audio API refs (not exposed in store interface)
 let _audioContext: AudioContext | null = null
@@ -385,17 +386,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       return
     }
 
-    const crossfadeDuration = useSettingsStore.getState().settings.crossfadeDuration
-
     if (existingAudio) {
-      if (crossfadeDuration > 0) {
-        // Crossfade: gradually fade out old audio
-        fadeOutAndCleanup(existingAudio, crossfadeDuration, audioBlobUrl)
-      } else {
-        existingAudio.pause()
-        existingAudio.src = ''
-        if (audioBlobUrl) URL.revokeObjectURL(audioBlobUrl)
-      }
+      existingAudio.pause()
+      existingAudio.src = ''
+      if (audioBlobUrl) URL.revokeObjectURL(audioBlobUrl)
       stopPositionUpdate()
     } else if (audioBlobUrl) {
       URL.revokeObjectURL(audioBlobUrl)
@@ -709,7 +703,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   setPlaybackMode: (mode) => set({ playbackMode: mode }),
 }))
 
-function fadeOutAndCleanup(audio: HTMLAudioElement, duration: number, blobUrl: string | null) {
+function fadeOutAndCleanup(audio: HTMLAudioElement, duration: number, blobUrl: string | null, oldSourceNode?: MediaElementAudioSourceNode | null) {
   const startVolume = audio.volume
   const steps = 20
   const interval = (duration * 1000) / steps
@@ -721,9 +715,58 @@ function fadeOutAndCleanup(audio: HTMLAudioElement, duration: number, blobUrl: s
       clearInterval(timer)
       audio.pause()
       audio.src = ''
+      if (oldSourceNode) {
+        try { oldSourceNode.disconnect() } catch { /* ok */ }
+      }
       if (blobUrl) URL.revokeObjectURL(blobUrl)
     }
   }, interval)
+}
+
+function triggerCrossfadeNext(currentTrack: Track | null, trackList: Track[], playbackMode: PlaybackMode, queue: QueueItem[]) {
+  let nextTrack: Track | null = null
+  const currentId = currentTrack?.id
+
+  if (queue.length > 0) {
+    nextTrack = queue[0].track
+    usePlayerStore.setState({ queue: queue.slice(1) })
+  } else if (trackList.length > 0) {
+    if (playbackMode === 'shuffle') {
+      const others = trackList.filter(t => t.id !== currentId)
+      if (others.length > 0) {
+        nextTrack = others[Math.floor(Math.random() * others.length)]
+      }
+    } else if (playbackMode === 'smartDj') {
+      const others = trackList.filter(t => t.id !== currentId)
+      nextTrack = pickSmartNext(currentTrack!, others)
+    } else {
+      const idx = trackList.findIndex(t => t.id === currentId)
+      if (idx >= 0 && idx < trackList.length - 1) {
+        nextTrack = trackList[idx + 1]
+      }
+    }
+  }
+
+  if (nextTrack) {
+    // Detach old audio from store so play() doesn't double-fade
+    const { audio, audioBlobUrl } = usePlayerStore.getState()
+    if (audio) {
+      audio.onended = null // prevent double-trigger
+      usePlayerStore.setState({ audio: null, audioBlobUrl: null })
+      const crossfadeDuration = useSettingsStore.getState().settings.crossfadeDuration
+      // Route old source directly to output for fade-out
+      const oldSource = _sourceNode
+      if (oldSource) {
+        const ctx = ensureAudioContext()
+        try { oldSource.disconnect() } catch { /* ok */ }
+        try { oldSource.connect(ctx.destination) } catch { /* ok */ }
+        _sourceNode = null
+      }
+      fadeOutAndCleanup(audio, crossfadeDuration, audioBlobUrl, oldSource)
+    }
+    stopPositionUpdate()
+    usePlayerStore.getState().play(nextTrack)
+  }
 }
 
 async function loadAndPlayTrack(trackId: number, track: Track) {
@@ -785,6 +828,11 @@ async function loadAndPlayTrack(trackId: number, track: Track) {
   }
 
   audio.onended = () => {
+    // If crossfade already triggered the next track, skip auto-next
+    if (crossfadeTriggered) {
+      crossfadeTriggered = false
+      return
+    }
     usePlayerStore.setState({ isPlaying: false, position: 0 })
     stopPositionUpdate()
     // Auto-play next from queue first
@@ -874,13 +922,25 @@ async function loadAndPlayTrack(trackId: number, track: Track) {
 
 function startPositionUpdate() {
   stopPositionUpdate()
+  crossfadeTriggered = false
   positionInterval = setInterval(() => {
-    const { audio, isPlaying, abLoop } = usePlayerStore.getState()
+    const { audio, isPlaying, abLoop, currentTrack, trackList, playbackMode, queue } = usePlayerStore.getState()
     if (audio && isPlaying) {
       // A-B Loop enforcement
       if (abLoop && abLoop.b > 0 && audio.currentTime >= abLoop.b) {
         audio.currentTime = abLoop.a
       }
+
+      // Crossfade: start next track before current ends
+      const crossfadeDuration = useSettingsStore.getState().settings.crossfadeDuration
+      if (crossfadeDuration > 0 && !crossfadeTriggered && audio.duration > crossfadeDuration && audio.duration > 0) {
+        const remaining = audio.duration - audio.currentTime
+        if (remaining <= crossfadeDuration && remaining > 0) {
+          crossfadeTriggered = true
+          triggerCrossfadeNext(currentTrack, trackList, playbackMode, queue)
+        }
+      }
+
       usePlayerStore.setState({ position: audio.currentTime })
     }
   }, 50)
