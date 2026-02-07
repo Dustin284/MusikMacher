@@ -146,6 +146,30 @@ class MusikMacherDB extends Dexie {
       projects: '++id, name, order',
       smartTags: '++id, name, category',
     })
+
+    // v10: Energy index for tracks
+    this.version(10).stores({
+      tracks: '++id, name, path, category, isHidden, createdAt, rating, playCount, isFavorite, projectId, energy',
+      tags: '++id, name, category, isHidden, isFavorite',
+      settings: 'id',
+      audioFiles: 'trackId',
+      importLocations: '++id, path, category',
+      libraries: '++id, name, order',
+      projects: '++id, name, order',
+      smartTags: '++id, name, category',
+    })
+
+    // v11: Artist field
+    this.version(11).stores({
+      tracks: '++id, name, path, category, isHidden, createdAt, rating, playCount, isFavorite, projectId, energy, artist',
+      tags: '++id, name, category, isHidden, isFavorite',
+      settings: 'id',
+      audioFiles: 'trackId',
+      importLocations: '++id, path, category',
+      libraries: '++id, name, order',
+      projects: '++id, name, order',
+      smartTags: '++id, name, category',
+    })
   }
 }
 

@@ -1,5 +1,34 @@
 # Changelog
 
+## v1.5.0
+
+### Neue Features
+
+- **Song-Suche im Download-Panel** — Neuer Tab "Suche" neben der URL-Eingabe ermoeglicht die direkte Suche nach Songs auf YouTube und SoundCloud. Suchergebnisse zeigen Thumbnail, Titel, Kanal und Dauer. Per Klick wird der Download gestartet.
+- **KI-Drop-Erkennung** — Automatische Erkennung von Drops und Builds per Rechtsklick → "Track analysieren". Nutzt Multi-Band-Spektralanalyse (Sub-Bass, Bass, Mid, High) mit adaptiven Schwellwerten. Maximal 8 Marker pro Track, mindestens 8 Sekunden Abstand. Drops erscheinen als rote, Builds als gelbe Cue-Marker auf der Waveform. Manuelle Cue-Points bleiben bei Re-Analyse erhalten.
+- **KI-Energie-Erkennung** — Automatische Berechnung eines Energie-Levels (1-10) basierend auf RMS, Spectral Rolloff und BPM. Neue farbkodierte Spalte in der Track-Tabelle (rot/amber/blau).
+- **KI-Auto-Tagging** — Automatische Klassifikation nach Analyse mit Tags wie "AI: Energetic", "AI: Chill", "AI: Dark", "AI: Bright", "AI: Vocal", "AI: Instrumental", "AI: Acoustic", "AI: Electronic", "AI: Melancholic".
+- **AI: Melancholic Tag** — Neuer Auto-Tag fuer melancholische Tracks: Moll-Tonart (Camelot A) + Energie ≤ 4 + BPM < 120 + dunkles Timbre (Centroid < 3000 Hz).
+- **Intro/Outro-Erkennung** — Automatische Erkennung von Intro-Ende und Outro-Start als gruene/lila Cue-Marker.
+- **Passende Tracks (Harmonic Mixing)** — Rechtsklick → "Passende Tracks finden" zeigt harmonisch kompatible Tracks basierend auf Camelot-Wheel (gleiche, ±1, parallele Tonart) und BPM-Naehe. Scoring mit farbigem Balken.
+- **Aehnliche Tracks** — Rechtsklick → "Aehnliche Tracks" findet akustisch aehnliche Tracks per Kosinus-Aehnlichkeit der Spectral-Feature-Vektoren (Centroid, Rolloff, ZCR, RMS, Chroma).
+- **Kuenstler-Spalte (Artist)** — Neue sortierbare, durchsuchbare und editierbare Spalte fuer den Kuenstler. Wird automatisch aus ID3v2 TPE1-Tag beim Import extrahiert. Per Doppelklick bearbeitbar.
+- **Album, Jahr & Titelnummer aus ID3** — Automatische Extraktion von Album (TALB), Jahr (TDRC/TYER) und Titelnummer (TRCK) aus ID3v2-Tags. Album und Jahr als eigene sortierbare Spalten sichtbar.
+- **Auto-Analyse nach Download** — Heruntergeladene Tracks werden sofort nach dem Import automatisch analysiert (BPM, Tonart, Energie, Drops, Auto-Tags).
+
+### Verbesserungen
+
+- **Batch-Analyse aller Tracks** — Neuer Toolbar-Button "Alle analysieren" startet die sequentielle Analyse aller sichtbaren/gefilterten Tracks. Fortschrittsbalken mit aktuellem Trackname, Zaehler, Prozentanzeige und geschaetzter Restzeit. Jederzeit abbrechbar.
+- **BPM-Erkennung komplett neu (Ellis 2007 / librosa)** — Spectral-Flux Onset-Erkennung per STFT statt einfacher Energie-Huelle, globale Autokorrelation des Onset-Signals, log-normale Tempo-Gewichtung zentriert auf 120 BPM (loest Oktav-Fehler zuverlaessig), parabolische Interpolation fuer sub-frame Genauigkeit. Ergebnisse entsprechen jetzt vocalremover.org BPM-Finder.
+- **Tonart-Erkennung verbessert** — 50% Overlap bei FFT-Frames, laengeres Analyse-Fenster (60s statt 30s), breiterer Frequenzbereich (50-4000 Hz) und Fix fuer negativen Modulo in der Chroma-Berechnung
+- **Nicht-blockierende Analyse (Web Worker)** — Track-Analyse (BPM, Tonart, Drops, Energie) laeuft jetzt in einem Web Worker und blockiert die UI nicht mehr
+- **Instrumental-Erkennung verbessert** — AI: Instrumental Tag wird jetzt bei ZCR < 0.05 und Centroid < 3000 Hz vergeben (vorher ZCR < 0.02, zu restriktiv)
+- Kuenstler, Album, Jahr und Titelnummer werden bei manuellem Import aus ID3-Tags ausgelesen
+- Smart Playlists unterstuetzen "Energie" als Regelfeld
+- DB-Migration v11: Artist-Index
+
+---
+
 ## v1.4.1
 
 ### Verbesserungen

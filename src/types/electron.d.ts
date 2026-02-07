@@ -28,6 +28,13 @@ export interface ElectronAPI {
   checkSpotdl?: () => Promise<boolean>
   installSpotdl?: () => Promise<boolean>
 
+  // Search
+  searchAudio?: (query: string, platform: 'youtube' | 'soundcloud' | 'both', count?: number) => Promise<{
+    success: boolean
+    results?: import('./index').SearchResult[]
+    error?: string
+  }>
+
   // Audio disk cache
   cacheAudioFromPath?: (filePath: string, trackId: number) => Promise<boolean>
   cacheAudio?: (trackId: number, audioData: ArrayBuffer) => Promise<boolean>

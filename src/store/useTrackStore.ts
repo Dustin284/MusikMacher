@@ -4,6 +4,8 @@ import { CATEGORY_TRACKS } from '../types'
 import { db, getTracks, getTags, addTag, updateTag, deleteTag, updateTrack, addTrack, storeAudioBlob, deleteTrack as dbDeleteTrack, getAudioBlob, setTrackProject as dbSetTrackProject } from '../db/database'
 import { useUndoStore } from './useUndoStore'
 import { useProjectStore } from './useProjectStore'
+import type { AnalysisResult } from '../workers/audioAnalysis.worker'
+import { usePlayerStore } from './usePlayerStore'
 
 interface TrackStore {
   tracks: Track[]
@@ -48,7 +50,15 @@ interface TrackStore {
   updateTrackNote: (trackId: number, noteId: string, text: string) => Promise<void>
   deleteTrackNote: (trackId: number, noteId: string) => Promise<void>
 
+  updateTrackEnergy: (id: number, energy: number) => Promise<void>
+  updateTrackAudioFeatures: (id: number, audioFeatures: number[]) => Promise<void>
+  updateTrackArtist: (id: number, artist: string) => Promise<void>
+  updateTrackAlbum: (id: number, album: string) => Promise<void>
+  updateTrackYear: (id: number, year: string) => Promise<void>
+
   setTrackProject: (trackId: number, projectId: number | undefined) => Promise<void>
+
+  analyzeTrack: (trackId: number) => Promise<void>
 
   importTracks: (files: FileList, category: number, subfoldersTag: boolean) => Promise<string>
   importDownloadedTrack: (fileData: ArrayBuffer, fileName: string, filePath: string, category: number) => Promise<{ trackId: number | null; log: string }>
@@ -288,6 +298,36 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
     updateTrack(trackId, { notes })
   },
 
+  updateTrackEnergy: async (id, energy) => {
+    const { tracks } = get()
+    set({ tracks: tracks.map(t => t.id === id ? { ...t, energy } : t) })
+    updateTrack(id, { energy })
+  },
+
+  updateTrackAudioFeatures: async (id, audioFeatures) => {
+    const { tracks } = get()
+    set({ tracks: tracks.map(t => t.id === id ? { ...t, audioFeatures } : t) })
+    updateTrack(id, { audioFeatures })
+  },
+
+  updateTrackArtist: async (id, artist) => {
+    const { tracks } = get()
+    set({ tracks: tracks.map(t => t.id === id ? { ...t, artist } : t) })
+    updateTrack(id, { artist })
+  },
+
+  updateTrackAlbum: async (id, album) => {
+    const { tracks } = get()
+    set({ tracks: tracks.map(t => t.id === id ? { ...t, album } : t) })
+    updateTrack(id, { album })
+  },
+
+  updateTrackYear: async (id, year) => {
+    const { tracks } = get()
+    set({ tracks: tracks.map(t => t.id === id ? { ...t, year } : t) })
+    updateTrack(id, { year })
+  },
+
   setTrackProject: async (trackId, projectId) => {
     const { tracks } = get()
     const track = tracks.find(t => t.id === trackId)
@@ -295,6 +335,87 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
     useUndoStore.getState().pushAction({ type: 'setProject', trackId, previousValue: track.projectId, newValue: projectId })
     set({ tracks: tracks.map(t => t.id === trackId ? { ...t, projectId } : t) })
     await dbSetTrackProject(trackId, projectId)
+  },
+
+  analyzeTrack: async (trackId) => {
+    const { tracks, updateTrackBPM: storeBPM, updateTrackKey: storeKey, updateTrackCuePoints: storeCues, updateTrackEnergy: storeEnergy, updateTrackAudioFeatures: storeFeatures } = get()
+    const track = tracks.find(t => t.id === trackId)
+    if (!track) return
+    const blob = await getAudioBlob(trackId)
+    if (!blob) return
+    try {
+      const arrayBuffer = await blob.arrayBuffer()
+      const audioContext = new AudioContext()
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
+      audioContext.close()
+
+      // Run heavy analysis off the main thread via Web Worker
+      const channelData = audioBuffer.getChannelData(0)
+      const result = await runAnalysisWorker(channelData, audioBuffer.sampleRate, audioBuffer.duration)
+
+      const { bpm, key, energy, featureVector, drops: autoDrops, introTime, outroTime, aiTags: aiTagNames } = result
+      await storeBPM(trackId, bpm)
+      await storeKey(trackId, key)
+      await storeEnergy(trackId, energy)
+      await storeFeatures(trackId, featureVector)
+
+      const introCue = {
+        id: 200,
+        position: Math.round(introTime * 100) / 100,
+        label: 'Intro',
+        color: '#22c55e',
+        source: 'auto-intro' as const,
+      }
+      const outroCue = {
+        id: 201,
+        position: Math.round(outroTime * 100) / 100,
+        label: 'Outro',
+        color: '#a855f7',
+        source: 'auto-outro' as const,
+      }
+
+      const freshTrack = get().tracks.find(t => t.id === trackId)
+      const existingManual = (freshTrack?.cuePoints || []).filter(
+        cp => cp.source !== 'auto-drop' && cp.source !== 'auto-build' && cp.source !== 'auto-intro' && cp.source !== 'auto-outro'
+      )
+      const mergedCuePoints = [...existingManual, ...autoDrops, introCue, outroCue]
+      await storeCues(trackId, mergedCuePoints)
+
+      // Remove old AI tags before adding new ones (clean re-analysis)
+      const removeTrackFromTagFn = get().removeTrackFromTag
+      const preTrack = get().tracks.find(t => t.id === trackId)
+      if (preTrack) {
+        const allTags = useTrackStore.getState().tags
+        for (const tid of preTrack.tagIds) {
+          const tag = allTags.find(t => t.id === tid)
+          if (tag && tag.name.startsWith('AI: ')) {
+            await removeTrackFromTagFn(trackId, tid)
+          }
+        }
+      }
+
+      const currentTags = useTrackStore.getState().tags
+      const addNewTagFn = get().addNewTag
+      const addTrackToTagFn = get().addTrackToTag
+      for (const tagName of aiTagNames) {
+        let tag = currentTags.find(t => t.name === tagName)
+        if (!tag) {
+          await addNewTagFn(tagName)
+          tag = useTrackStore.getState().tags.find(t => t.name === tagName)
+        }
+        const latestTrack = get().tracks.find(t => t.id === trackId)
+        if (tag?.id && latestTrack && !latestTrack.tagIds.includes(tag.id)) {
+          await addTrackToTagFn(trackId, tag.id)
+        }
+      }
+
+      const ct = usePlayerStore.getState().currentTrack
+      if (ct && ct.id === trackId) {
+        usePlayerStore.setState({
+          currentTrack: { ...ct, bpm, musicalKey: key, energy, cuePoints: mergedCuePoints },
+        })
+      }
+    } catch (err) { console.error('[analyzeTrack] failed for trackId', trackId, err) }
   },
 
   importTracks: async (files, category, subfoldersTag) => {
@@ -376,6 +497,12 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
         trackData.artworkBlob = await artworkBlob.arrayBuffer() as unknown as Blob
       }
 
+      const meta = await extractID3Metadata(file)
+      if (meta.artist) trackData.artist = meta.artist
+      if (meta.album) trackData.album = meta.album
+      if (meta.year) trackData.year = meta.year
+      if (meta.trackNumber) trackData.trackNumber = meta.trackNumber
+
       const trackId = await addTrack(trackData)
       await storeAudioBlob(trackId, file)
 
@@ -423,6 +550,12 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
       trackData.artworkBlob = await artworkBlob.arrayBuffer() as unknown as Blob
     }
 
+    const meta = await extractID3Metadata(file)
+    if (meta.artist) trackData.artist = meta.artist
+    if (meta.album) trackData.album = meta.album
+    if (meta.year) trackData.year = meta.year
+    if (meta.trackNumber) trackData.trackNumber = meta.trackNumber
+
     const trackId = await addTrack(trackData)
 
     // Store in IndexedDB as fallback
@@ -453,7 +586,8 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
       if (terms.length > 0) {
         const nameLC = track.name.toLowerCase()
         const commentLC = track.comment.toLowerCase()
-        const matches = terms.every(t => nameLC.includes(t) || commentLC.includes(t))
+        const artistLC = (track.artist || '').toLowerCase()
+        const matches = terms.every(t => nameLC.includes(t) || commentLC.includes(t) || artistLC.includes(t))
         if (!matches) return false
       }
 
@@ -620,4 +754,116 @@ function extractID3Artwork(buffer: ArrayBuffer, view: DataView): Blob | undefine
     offset += frameSize
   }
   return undefined
+}
+
+interface ID3Metadata {
+  artist?: string
+  album?: string
+  year?: string
+  trackNumber?: number
+}
+
+async function extractID3Metadata(file: File): Promise<ID3Metadata> {
+  try {
+    const buffer = await file.arrayBuffer()
+    const view = new DataView(buffer)
+
+    if (
+      buffer.byteLength > 10 &&
+      view.getUint8(0) === 0x49 &&
+      view.getUint8(1) === 0x44 &&
+      view.getUint8(2) === 0x33
+    ) {
+      return extractID3TextFrames(buffer, view)
+    }
+  } catch {
+    // Metadata extraction failed
+  }
+  return {}
+}
+
+function decodeID3Text(view: DataView, offset: number, frameSize: number): string | undefined {
+  const encoding = view.getUint8(offset)
+  const textBytes = new Uint8Array(view.buffer, offset + 1, frameSize - 1)
+
+  if (encoding === 0 || encoding === 3) {
+    const decoder = new TextDecoder(encoding === 3 ? 'utf-8' : 'iso-8859-1')
+    const text = decoder.decode(textBytes).replace(/\0/g, '').trim()
+    return text || undefined
+  } else if (encoding === 1 || encoding === 2) {
+    const decoder = new TextDecoder('utf-16')
+    const text = decoder.decode(textBytes).replace(/\0/g, '').trim()
+    return text || undefined
+  }
+  return undefined
+}
+
+function extractID3TextFrames(buffer: ArrayBuffer, view: DataView): ID3Metadata {
+  const version = view.getUint8(3)
+  const tagSize =
+    (view.getUint8(6) << 21) |
+    (view.getUint8(7) << 14) |
+    (view.getUint8(8) << 7) |
+    view.getUint8(9)
+
+  const result: ID3Metadata = {}
+  const wantedFrames = new Set(['TPE1', 'TALB', 'TDRC', 'TYER', 'TRCK'])
+
+  let offset = 10
+  const end = Math.min(offset + tagSize, buffer.byteLength)
+
+  while (offset + 10 < end) {
+    const frameId = String.fromCharCode(
+      view.getUint8(offset),
+      view.getUint8(offset + 1),
+      view.getUint8(offset + 2),
+      view.getUint8(offset + 3)
+    )
+
+    let frameSize: number
+    if (version === 4) {
+      frameSize =
+        (view.getUint8(offset + 4) << 21) |
+        (view.getUint8(offset + 5) << 14) |
+        (view.getUint8(offset + 6) << 7) |
+        view.getUint8(offset + 7)
+    } else {
+      frameSize = view.getUint32(offset + 4)
+    }
+
+    if (frameSize <= 0 || frameSize > buffer.byteLength) break
+
+    offset += 10
+
+    if (wantedFrames.has(frameId)) {
+      const text = decodeID3Text(view, offset, frameSize)
+      if (text) {
+        switch (frameId) {
+          case 'TPE1': result.artist = text; break
+          case 'TALB': result.album = text; break
+          case 'TDRC': case 'TYER': if (!result.year) result.year = text.slice(0, 4); break
+          case 'TRCK': { const n = parseInt(text.split('/')[0], 10); if (n > 0) result.trackNumber = n; break }
+        }
+      }
+    }
+
+    offset += frameSize
+  }
+  return result
+}
+
+function runAnalysisWorker(channelData: Float32Array, sampleRate: number, duration: number): Promise<AnalysisResult> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('../workers/audioAnalysis.worker.ts', import.meta.url), { type: 'module' })
+    worker.onmessage = (e: MessageEvent<AnalysisResult>) => {
+      resolve(e.data)
+      worker.terminate()
+    }
+    worker.onerror = (e) => {
+      reject(e)
+      worker.terminate()
+    }
+    // Transfer the underlying ArrayBuffer for zero-copy performance
+    worker.postMessage({ channelData, sampleRate, duration }, [channelData.buffer])
+  })
 }

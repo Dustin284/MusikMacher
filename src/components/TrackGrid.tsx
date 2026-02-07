@@ -7,16 +7,17 @@ import { useSmartPlaylistStore } from '../store/useSmartPlaylistStore'
 import { useTranslation } from '../i18n/useTranslation'
 import { formatTime } from '../utils/formatTime'
 import { getAudioBlob, getFavoriteTracks, updateTrack as dbUpdateTrack } from '../db/database'
-import { detectBPM, detectKey } from '../utils/audioAnalysis'
 import TagAssignmentPopover from './TagAssignmentPopover'
 import TrackContextMenu from './TrackContextMenu'
 import StemSeparationModal from './StemSeparationModal'
+import CompatibleTracksModal from './CompatibleTracksModal'
+import SimilarTracksModal from './SimilarTracksModal'
 import type { Track } from '../types'
 
 const ROW_HEIGHT = 41
 const OVERSCAN = 20
 
-type SortField = 'name' | 'length' | 'createdAt' | 'comment' | 'bpm' | 'musicalKey' | 'rating'
+type SortField = 'name' | 'length' | 'createdAt' | 'comment' | 'bpm' | 'musicalKey' | 'rating' | 'energy' | 'artist' | 'album' | 'year'
 
 interface TrackGridProps {
   category: number
@@ -37,6 +38,14 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
   const updateTrackBPM = useTrackStore(s => s.updateTrackBPM)
   const updateTrackKey = useTrackStore(s => s.updateTrackKey)
   const updateTrackRating = useTrackStore(s => s.updateTrackRating)
+  const updateTrackCuePoints = useTrackStore(s => s.updateTrackCuePoints)
+  const updateTrackEnergy = useTrackStore(s => s.updateTrackEnergy)
+  const updateTrackAudioFeatures = useTrackStore(s => s.updateTrackAudioFeatures)
+  const updateTrackArtist = useTrackStore(s => s.updateTrackArtist)
+  const updateTrackAlbum = useTrackStore(s => s.updateTrackAlbum)
+  const updateTrackYear = useTrackStore(s => s.updateTrackYear)
+  const analyzeTrack = useTrackStore(s => s.analyzeTrack)
+  const addNewTag = useTrackStore(s => s.addNewTag)
   const addTrackToTag = useTrackStore(s => s.addTrackToTag)
   const removeTrackFromTag = useTrackStore(s => s.removeTrackFromTag)
   const importTracks = useTrackStore(s => s.importTracks)
@@ -60,6 +69,12 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
   const [selectedIndex, setSelectedIndex] = useState<number>(-1)
   const [editingCommentId, setEditingCommentId] = useState<number | null>(null)
   const [editingComment, setEditingComment] = useState('')
+  const [editingArtistId, setEditingArtistId] = useState<number | null>(null)
+  const [editingArtist, setEditingArtist] = useState('')
+  const [editingAlbumId, setEditingAlbumId] = useState<number | null>(null)
+  const [editingAlbum, setEditingAlbum] = useState('')
+  const [editingYearId, setEditingYearId] = useState<number | null>(null)
+  const [editingYear, setEditingYear] = useState('')
   const [isDragOver, setIsDragOver] = useState(false)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; track: Track } | null>(null)
   const [selectedTrackIds, setSelectedTrackIds] = useState<Set<number>>(new Set())
@@ -69,6 +84,15 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
   const [showColumnSettings, setShowColumnSettings] = useState(false)
   const [identifyingTrackId, setIdentifyingTrackId] = useState<number | null>(null)
   const [stemSeparationTrack, setStemSeparationTrack] = useState<Track | null>(null)
+  const [compatibleTrack, setCompatibleTrack] = useState<Track | null>(null)
+  const [similarTrack, setSimilarTrack] = useState<Track | null>(null)
+  const [analyzeProgress, setAnalyzeProgress] = useState<{
+    current: number
+    total: number
+    currentName: string
+    startedAt: number
+  } | null>(null)
+  const analyzeCancelRef = useRef(false)
   const tableRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -100,7 +124,8 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
       if (terms.length > 0) {
         const nameLC = track.name.toLowerCase()
         const commentLC = track.comment.toLowerCase()
-        if (!terms.every(t => nameLC.includes(t) || commentLC.includes(t))) return false
+        const artistLC = (track.artist || '').toLowerCase()
+        if (!terms.every(t => nameLC.includes(t) || commentLC.includes(t) || artistLC.includes(t))) return false
       }
       if (activeTags.length > 0) {
         if (settings.andTagCombination) {
@@ -126,6 +151,10 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
         case 'bpm': cmp = (a.bpm || 0) - (b.bpm || 0); break
         case 'musicalKey': cmp = (a.musicalKey || '').localeCompare(b.musicalKey || ''); break
         case 'rating': cmp = (a.rating || 0) - (b.rating || 0); break
+        case 'energy': cmp = (a.energy || 0) - (b.energy || 0); break
+        case 'artist': cmp = (a.artist || '').localeCompare(b.artist || ''); break
+        case 'album': cmp = (a.album || '').localeCompare(b.album || ''); break
+        case 'year': cmp = (a.year || '').localeCompare(b.year || ''); break
       }
       return sortDir === 'asc' ? cmp : -cmp
     })
@@ -214,6 +243,36 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
     setEditingCommentId(null)
   }
 
+  const startEditArtist = (track: Track) => {
+    setEditingArtistId(track.id!)
+    setEditingArtist(track.artist || '')
+  }
+
+  const finishEditArtist = () => {
+    if (editingArtistId !== null) updateTrackArtist(editingArtistId, editingArtist)
+    setEditingArtistId(null)
+  }
+
+  const startEditAlbum = (track: Track) => {
+    setEditingAlbumId(track.id!)
+    setEditingAlbum(track.album || '')
+  }
+
+  const finishEditAlbum = () => {
+    if (editingAlbumId !== null) updateTrackAlbum(editingAlbumId, editingAlbum)
+    setEditingAlbumId(null)
+  }
+
+  const startEditYear = (track: Track) => {
+    setEditingYearId(track.id!)
+    setEditingYear(track.year || '')
+  }
+
+  const finishEditYear = () => {
+    if (editingYearId !== null) updateTrackYear(editingYearId, editingYear)
+    setEditingYearId(null)
+  }
+
   // Prepare drag file on mousedown (main process copies from disk cache, no data transfer)
   const handleTrackMouseDown = (track: Track) => {
     if (!window.electronAPI?.prepareDrag) return
@@ -263,23 +322,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
   }
 
   const handleAnalyze = async (track: Track) => {
-    const blob = await getAudioBlob(track.id!)
-    if (!blob) return
-    try {
-      const arrayBuffer = await blob.arrayBuffer()
-      const audioContext = new AudioContext()
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer)
-      audioContext.close()
-      const bpm = detectBPM(audioBuffer)
-      const key = detectKey(audioBuffer)
-      await updateTrackBPM(track.id!, bpm)
-      await updateTrackKey(track.id!, key)
-      // Sync to player store if this is the current track
-      const ct = usePlayerStore.getState().currentTrack
-      if (ct && ct.id === track.id) {
-        usePlayerStore.setState({ currentTrack: { ...ct, bpm, musicalKey: key } })
-      }
-    } catch { /* analysis failed silently */ }
+    await analyzeTrack(track.id!)
   }
 
   // Batch operations
@@ -325,6 +368,33 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
       }
     } catch { /* identification failed */ }
     setIdentifyingTrackId(null)
+  }
+
+  function formatEta(startedAt: number, current: number, total: number): string {
+    if (current < 2) return ''
+    const elapsed = Date.now() - startedAt
+    const msPerTrack = elapsed / current
+    const remaining = msPerTrack * (total - current)
+    const seconds = Math.ceil(remaining / 1000)
+    if (seconds < 60) return `~${seconds}s`
+    const minutes = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `~${minutes}m ${secs}s`
+  }
+
+  const handleAnalyzeAll = async () => {
+    const tracksToAnalyze = sortedTracks
+    const total = tracksToAnalyze.length
+    if (total === 0) return
+    analyzeCancelRef.current = false
+    const startedAt = Date.now()
+    for (let i = 0; i < total; i++) {
+      if (analyzeCancelRef.current) break
+      const track = tracksToAnalyze[i]
+      setAnalyzeProgress({ current: i + 1, total, currentName: track.name, startedAt })
+      await handleAnalyze(track)
+    }
+    setAnalyzeProgress(null)
   }
 
   // Event delegation for tbody clicks
@@ -469,6 +539,8 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
           onToggleFavorite={(track) => toggleFavorite(track.id!)}
           onIdentifyTrack={settings.acoustidApiKey ? handleIdentifyTrack : undefined}
           onSeparateStems={(track) => setStemSeparationTrack(track)}
+          onFindCompatible={(track) => setCompatibleTrack(track)}
+          onFindSimilar={(track) => setSimilarTrack(track)}
           tags={tags}
           onTagToggle={(trackId, tagId, add) => {
             if (add) addTrackToTag(trackId, tagId)
@@ -486,6 +558,24 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
         onClose={() => setStemSeparationTrack(null)}
         track={stemSeparationTrack}
         category={category}
+      />
+
+      {/* Compatible Tracks Modal */}
+      <CompatibleTracksModal
+        isOpen={compatibleTrack !== null}
+        onClose={() => setCompatibleTrack(null)}
+        track={compatibleTrack}
+        allTracks={tracks}
+        onPlay={(track) => play(track)}
+      />
+
+      {/* Similar Tracks Modal */}
+      <SimilarTracksModal
+        isOpen={similarTrack !== null}
+        onClose={() => setSimilarTrack(null)}
+        track={similarTrack}
+        allTracks={tracks}
+        onPlay={(track) => play(track)}
       />
 
       {/* Search bar */}
@@ -546,6 +636,27 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
             <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
           </svg>
         </button>
+        <button
+          onClick={handleAnalyzeAll}
+          disabled={analyzeProgress !== null || sortedTracks.length === 0}
+          className={`p-1.5 rounded-lg transition-all duration-150 active:scale-95 shrink-0 ${
+            analyzeProgress !== null
+              ? 'bg-primary-500/20 text-primary-500'
+              : 'hover:bg-surface-200/80 dark:hover:bg-surface-800/80 text-surface-400'
+          } disabled:opacity-40 disabled:cursor-not-allowed`}
+          title={t('batch.analyzeAll')}
+        >
+          {analyzeProgress !== null ? (
+            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zm0-8v2h14V9H7z" />
+            </svg>
+          )}
+        </button>
         <label className="text-[11px] flex items-center gap-1.5 text-surface-500 cursor-pointer shrink-0">
           <input type="checkbox" checked={showHidden} onChange={(e) => setShowHidden(e.target.checked)} />
           {t('browse.hidden')}
@@ -579,12 +690,16 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
               <div className="text-[10px] font-semibold text-surface-400 uppercase tracking-wider mb-2">{t('browse.columns')}</div>
               {[
                 { value: 'name', label: t('browse.name') },
+                { value: 'artist', label: t('browse.artist') },
+                { value: 'album', label: t('browse.album') },
+                { value: 'year', label: t('browse.year') },
                 { value: 'duration', label: t('browse.duration') },
                 { value: 'bpm', label: t('browse.bpm') },
                 { value: 'key', label: t('browse.key') },
                 { value: 'rating', label: t('browse.rating') },
                 { value: 'created', label: t('browse.created') },
                 { value: 'tags', label: t('browse.tags') },
+                { value: 'energy', label: t('browse.energy') },
                 { value: 'comment', label: t('browse.comment') },
               ].map(col => (
                 <label key={col.value} className="flex items-center gap-2 py-1 text-[13px] text-surface-600 dark:text-surface-400 cursor-pointer">
@@ -642,6 +757,37 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
         </div>
       )}
 
+      {/* Analyze progress bar */}
+      {analyzeProgress && (
+        <div className="px-3 pb-2">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[12px] text-surface-600 dark:text-surface-400 truncate flex-1">
+              {t('batch.analyzing', { current: String(analyzeProgress.current), total: String(analyzeProgress.total), name: analyzeProgress.currentName })}
+            </span>
+            <span className="text-[12px] text-surface-500 tabular-nums font-mono shrink-0">
+              {Math.round((analyzeProgress.current / analyzeProgress.total) * 100)}%
+            </span>
+            <button
+              onClick={() => { analyzeCancelRef.current = true }}
+              className="px-2 py-0.5 text-[11px] rounded bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors font-medium shrink-0"
+            >
+              {t('batch.analyzeCancel')}
+            </button>
+          </div>
+          <div className="w-full h-1.5 bg-surface-200 dark:bg-surface-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary-500 rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${(analyzeProgress.current / analyzeProgress.total) * 100}%` }}
+            />
+          </div>
+          {formatEta(analyzeProgress.startedAt, analyzeProgress.current, analyzeProgress.total) && (
+            <div className="text-[11px] text-surface-400 mt-0.5">
+              {t('batch.analyzeEta', { time: formatEta(analyzeProgress.startedAt, analyzeProgress.current, analyzeProgress.total) })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Table */}
       <div className="flex-1 overflow-auto" ref={tableRef}>
         {sortedTracks.length === 0 ? (
@@ -665,9 +811,13 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
               <tr className="text-surface-500 text-[11px] font-semibold uppercase tracking-wider">
                 <th className="w-9 px-1 py-2" />
                 <SortHeader field="name" className="text-left">{t('browse.name')}</SortHeader>
+                {isColVisible('artist') && <SortHeader field="artist" className="text-left w-28">{t('browse.artist')}</SortHeader>}
+                {isColVisible('album') && <SortHeader field="album" className="text-left w-28">{t('browse.album')}</SortHeader>}
+                {isColVisible('year') && <SortHeader field="year" className="text-left w-14">{t('browse.year')}</SortHeader>}
                 {isColVisible('duration') && <SortHeader field="length" className="text-right w-20">{t('browse.duration')}</SortHeader>}
                 {isColVisible('bpm') && <SortHeader field="bpm" className="text-right w-16">{t('browse.bpm')}</SortHeader>}
                 {isColVisible('key') && <SortHeader field="musicalKey" className="text-left w-16">{t('browse.key')}</SortHeader>}
+                {isColVisible('energy') && <SortHeader field="energy" className="text-right w-16">{t('browse.energy')}</SortHeader>}
                 {isColVisible('rating') && <SortHeader field="rating" className="text-center w-24">{t('browse.rating')}</SortHeader>}
                 {isColVisible('created') && <SortHeader field="createdAt" className="text-left w-28">{t('browse.created')}</SortHeader>}
                 {isColVisible('tags') && <th className="text-left px-2.5 py-2 w-28">{t('browse.tags')}</th>}
@@ -743,6 +893,90 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
                       </span>
                     </td>
 
+                    {/* Artist */}
+                    {isColVisible('artist') && (
+                    <td className="px-2.5 py-1.5" onMouseDown={(e) => e.stopPropagation()} onDragStart={(e) => e.preventDefault()}>
+                      {editingArtistId === track.id ? (
+                        <input
+                          type="text"
+                          value={editingArtist}
+                          onChange={(e) => setEditingArtist(e.target.value)}
+                          onBlur={finishEditArtist}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') finishEditArtist()
+                            if (e.key === 'Escape') setEditingArtistId(null)
+                          }}
+                          autoFocus
+                          className="w-full px-1.5 py-0.5 text-[13px] rounded-md border-2 border-primary-500 bg-white dark:bg-surface-800 focus:outline-none"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <span
+                          className="text-[12px] text-surface-500 truncate block max-w-[120px] cursor-text"
+                          onDoubleClick={(e) => { e.stopPropagation(); startEditArtist(track) }}
+                        >
+                          {track.artist || <span className="text-surface-300 dark:text-surface-700">&mdash;</span>}
+                        </span>
+                      )}
+                    </td>
+                    )}
+
+                    {/* Album */}
+                    {isColVisible('album') && (
+                    <td className="px-2.5 py-1.5" onMouseDown={(e) => e.stopPropagation()} onDragStart={(e) => e.preventDefault()}>
+                      {editingAlbumId === track.id ? (
+                        <input
+                          type="text"
+                          value={editingAlbum}
+                          onChange={(e) => setEditingAlbum(e.target.value)}
+                          onBlur={finishEditAlbum}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') finishEditAlbum()
+                            if (e.key === 'Escape') setEditingAlbumId(null)
+                          }}
+                          autoFocus
+                          className="w-full px-1.5 py-0.5 text-[13px] rounded-md border-2 border-primary-500 bg-white dark:bg-surface-800 focus:outline-none"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <span
+                          className="text-[12px] text-surface-500 truncate block max-w-[120px] cursor-text"
+                          onDoubleClick={(e) => { e.stopPropagation(); startEditAlbum(track) }}
+                        >
+                          {track.album || <span className="text-surface-300 dark:text-surface-700">&mdash;</span>}
+                        </span>
+                      )}
+                    </td>
+                    )}
+
+                    {/* Year */}
+                    {isColVisible('year') && (
+                    <td className="px-2.5 py-1.5" onMouseDown={(e) => e.stopPropagation()} onDragStart={(e) => e.preventDefault()}>
+                      {editingYearId === track.id ? (
+                        <input
+                          type="text"
+                          value={editingYear}
+                          onChange={(e) => setEditingYear(e.target.value)}
+                          onBlur={finishEditYear}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') finishEditYear()
+                            if (e.key === 'Escape') setEditingYearId(null)
+                          }}
+                          autoFocus
+                          className="w-full px-1.5 py-0.5 text-[13px] rounded-md border-2 border-primary-500 bg-white dark:bg-surface-800 focus:outline-none"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <span
+                          className="text-[12px] text-surface-500 tabular-nums cursor-text"
+                          onDoubleClick={(e) => { e.stopPropagation(); startEditYear(track) }}
+                        >
+                          {track.year || <span className="text-surface-300 dark:text-surface-700">&mdash;</span>}
+                        </span>
+                      )}
+                    </td>
+                    )}
+
                     {/* Duration */}
                     {isColVisible('duration') && (
                     <td className="px-2.5 py-1.5 text-right text-surface-500 tabular-nums font-mono text-[12px]">
@@ -761,6 +995,19 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
                     {isColVisible('key') && (
                     <td className="px-2.5 py-1.5 text-surface-500 text-[12px]">
                       {track.musicalKey || <span className="text-surface-300 dark:text-surface-700">&mdash;</span>}
+                    </td>
+                    )}
+
+                    {/* Energy */}
+                    {isColVisible('energy') && (
+                    <td className="px-2.5 py-1.5 text-right tabular-nums font-mono text-[12px]">
+                      {track.energy ? (
+                        <span className={track.energy >= 7 ? 'text-red-500' : track.energy >= 4 ? 'text-amber-500' : 'text-blue-500'}>
+                          {track.energy}
+                        </span>
+                      ) : (
+                        <span className="text-surface-300 dark:text-surface-700">&mdash;</span>
+                      )}
                     </td>
                     )}
 

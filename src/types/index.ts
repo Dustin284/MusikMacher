@@ -1,10 +1,23 @@
+// --- Search Results ---
+export interface SearchResult {
+  id: string
+  url: string
+  title: string
+  channel: string
+  duration: number
+  durationString: string
+  thumbnail: string
+  platform: 'youtube' | 'soundcloud'
+  verified?: boolean
+}
+
 // --- Cue Points ---
 export interface CuePoint {
   id: number        // 1-9 (keyboard slot) or 100+ (auto-detected)
   position: number  // seconds
   label: string
   color: string     // hex color
-  source?: 'manual' | 'auto-drop' | 'auto-build'
+  source?: 'manual' | 'auto-drop' | 'auto-build' | 'auto-intro' | 'auto-outro'
 }
 
 // --- Waveform Notes ---
@@ -54,6 +67,10 @@ export interface Project {
 export interface Track {
   id?: number
   name: string
+  artist?: string
+  album?: string
+  year?: string
+  trackNumber?: number
   path: string
   length: number // duration in seconds
   createdAt: string
@@ -76,6 +93,8 @@ export interface Track {
   isFavorite?: boolean
   notes?: WaveformNote[]
   projectId?: number
+  energy?: number // 1-10
+  audioFeatures?: number[] // 17 values: centroid, rolloff, zcr, rms, bpm, 12×chroma
 }
 
 // --- Smart Tags ---
@@ -88,7 +107,7 @@ export interface SmartTag {
 }
 
 export interface SmartTagRule {
-  field: 'bpm' | 'musicalKey' | 'rating' | 'name' | 'comment' | 'duration' | 'tags' | 'playCount' | 'isFavorite' | 'lastPlayedAt'
+  field: 'bpm' | 'musicalKey' | 'rating' | 'name' | 'comment' | 'duration' | 'tags' | 'playCount' | 'isFavorite' | 'lastPlayedAt' | 'energy'
   operator: 'equals' | 'contains' | 'gt' | 'lt' | 'between' | 'isEmpty' | 'isNotEmpty' | 'daysAgo'
   value: string
   value2?: string // for 'between'

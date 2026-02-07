@@ -93,6 +93,9 @@ export const useSmartPlaylistStore = create<SmartPlaylistStore>((set, get) => ({
       case 'isFavorite':
         trackValue = track.isFavorite ?? false
         break
+      case 'energy':
+        trackValue = track.energy
+        break
       case 'lastPlayedAt':
         trackValue = track.lastPlayedAt
         break

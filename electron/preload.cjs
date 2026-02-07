@@ -27,6 +27,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkSpotdl: () => ipcRenderer.invoke('check-spotdl'),
   installSpotdl: () => ipcRenderer.invoke('install-spotdl'),
 
+  // Search
+  searchAudio: (query, platform, count) => ipcRenderer.invoke('search-audio', { query, platform, count }),
+
   // Audio disk cache
   cacheAudioFromPath: (filePath, trackId) => ipcRenderer.invoke('cache-audio-from-path', filePath, trackId),
   cacheAudio: (trackId, audioData) => ipcRenderer.invoke('cache-audio', trackId, audioData),

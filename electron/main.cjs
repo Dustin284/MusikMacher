@@ -585,6 +585,91 @@ ipcMain.handle('download-spotify', async (event, url) => {
   }
 })
 
+// --- Audio search ---
+ipcMain.handle('search-audio', async (_event, { query, platform, count }) => {
+  try {
+    const ytdlpPath = getYtdlpPath()
+    if (!fs.existsSync(ytdlpPath)) {
+      return { success: false, error: 'yt-dlp not installed' }
+    }
+
+    const n = count || 8
+
+    // Helper: run a single yt-dlp search and return parsed results
+    function runSearch(prefix, perPlatform, platformLabel) {
+      return new Promise((resolve) => {
+        const sq = `${prefix}${perPlatform}:${query}`
+        const proc = spawn(ytdlpPath, [
+          '--flat-playlist',
+          '--dump-json',
+          '--no-check-certificates',
+          sq,
+        ])
+
+        let stdout = ''
+        proc.stdout.on('data', (data) => { stdout += data.toString() })
+        proc.stderr.on('data', () => {})
+
+        const timeout = setTimeout(() => {
+          proc.kill()
+          resolve([])
+        }, 30000)
+
+        proc.on('close', () => {
+          clearTimeout(timeout)
+          if (!stdout.trim()) return resolve([])
+          try {
+            const results = stdout.trim().split('\n').filter(Boolean).map(line => {
+              const obj = JSON.parse(line)
+              const dur = obj.duration || 0
+              const mins = Math.floor(dur / 60)
+              const secs = Math.floor(dur % 60)
+              return {
+                id: obj.id || '',
+                url: obj.url || obj.webpage_url || '',
+                title: obj.title || '',
+                channel: obj.uploader || obj.channel || '',
+                duration: dur,
+                durationString: `${mins}:${secs.toString().padStart(2, '0')}`,
+                thumbnail: (() => {
+                  const raw = (obj.thumbnails && obj.thumbnails.length > 0) ? obj.thumbnails[obj.thumbnails.length - 1].url : ''
+                  if (platformLabel === 'soundcloud' && raw) return raw.replace('-original.', '-t500x500.')
+                  return raw
+                })(),
+                platform: platformLabel,
+                verified: !!obj.channel_is_verified,
+              }
+            })
+            resolve(results)
+          } catch {
+            resolve([])
+          }
+        })
+
+        proc.on('error', () => {
+          clearTimeout(timeout)
+          resolve([])
+        })
+      })
+    }
+
+    if (platform === 'both') {
+      const perPlatform = Math.max(1, Math.floor(n / 2))
+      const [ytResults, scResults] = await Promise.all([
+        runSearch('ytsearch', perPlatform, 'youtube'),
+        runSearch('scsearch', perPlatform, 'soundcloud'),
+      ])
+      return { success: true, results: [...ytResults, ...scResults] }
+    }
+
+    const prefix = platform === 'soundcloud' ? 'scsearch' : 'ytsearch'
+    const results = await runSearch(prefix, n, platform === 'soundcloud' ? 'soundcloud' : 'youtube')
+    return { success: true, results }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
+
 // --- Audio file disk cache ---
 const audioCacheDir = path.join(app.getPath('userData'), 'audio')
 const waveformCacheDir = path.join(app.getPath('userData'), 'waveforms')

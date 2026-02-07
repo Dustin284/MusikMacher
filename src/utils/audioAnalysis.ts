@@ -1,89 +1,184 @@
 import type { CuePoint } from '../types'
 
 /**
- * Detect drops and builds in an audio track using RMS energy analysis.
- * Computes RMS energy in 0.5s windows, then finds peaks where the
- * energy delta exceeds 2x the standard deviation.
+ * Detect drops and builds in an audio track using multi-band spectral analysis.
+ *
+ * Algorithm:
+ * 1. Split audio into ~50ms frames (25ms hop) and compute FFT per frame
+ * 2. Sum energy in 4 frequency bands (sub-bass, bass, mid, high)
+ * 3. Compute half-wave rectified spectral flux per band
+ * 4. Adaptive threshold via sliding median + 2.5× MAD (4s window)
+ * 5. Score & classify candidates as Drop or Build
+ * 6. Greedy selection: top 8 by score, min 8s gap
+ *
  * Returns CuePoints with IDs starting at 100.
  */
 export function detectDrops(audioBuffer: AudioBuffer): CuePoint[] {
   const channelData = audioBuffer.getChannelData(0)
   const sampleRate = audioBuffer.sampleRate
-  const windowSize = Math.floor(sampleRate * 0.5) // 0.5 second windows
-  const numWindows = Math.floor(channelData.length / windowSize)
 
-  if (numWindows < 3) return []
+  // Frame parameters — use power-of-2 FFT size closest to 50ms
+  const fftSize = 2048 // ~46ms at 44100 Hz
+  const hopSize = Math.floor(fftSize / 2) // ~23ms hop
+  const numFrames = Math.floor((channelData.length - fftSize) / hopSize)
 
-  // Calculate RMS energy for each window
-  const rmsEnergy = new Float64Array(numWindows)
-  for (let i = 0; i < numWindows; i++) {
-    let sum = 0
-    const offset = i * windowSize
-    for (let j = 0; j < windowSize; j++) {
-      const sample = channelData[offset + j]
-      sum += sample * sample
+  if (numFrames < 10) return []
+
+  // Frequency band boundaries in Hz
+  const bands = [
+    { name: 'subBass', lo: 20, hi: 100 },
+    { name: 'bass', lo: 100, hi: 300 },
+    { name: 'mid', lo: 300, hi: 4000 },
+    { name: 'high', lo: 4000, hi: sampleRate / 2 },
+  ]
+
+  // Precompute bin ranges for each band
+  const bandBins = bands.map(b => ({
+    lo: Math.max(1, Math.floor((b.lo * fftSize) / sampleRate)),
+    hi: Math.min(fftSize / 2 - 1, Math.floor((b.hi * fftSize) / sampleRate)),
+  }))
+
+  // Compute per-frame, per-band energy
+  const bandEnergy: Float64Array[] = bands.map(() => new Float64Array(numFrames))
+  const frameData = new Float64Array(fftSize)
+
+  for (let f = 0; f < numFrames; f++) {
+    const offset = f * hopSize
+    // Apply Hann window and copy to frameData
+    for (let i = 0; i < fftSize; i++) {
+      const w = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (fftSize - 1)))
+      frameData[i] = (channelData[offset + i] || 0) * w
     }
-    rmsEnergy[i] = Math.sqrt(sum / windowSize)
+
+    const mags = computeMagnitudeSpectrum(frameData, fftSize)
+
+    for (let b = 0; b < bands.length; b++) {
+      let energy = 0
+      for (let bin = bandBins[b].lo; bin <= bandBins[b].hi; bin++) {
+        energy += mags[bin] * mags[bin]
+      }
+      bandEnergy[b][f] = energy
+    }
   }
 
-  // Calculate deltas between consecutive windows
-  const deltas = new Float64Array(numWindows - 1)
-  for (let i = 0; i < numWindows - 1; i++) {
-    deltas[i] = rmsEnergy[i + 1] - rmsEnergy[i]
+  // Compute half-wave rectified spectral flux per band
+  const flux: Float64Array[] = bands.map(() => new Float64Array(numFrames - 1))
+  for (let b = 0; b < bands.length; b++) {
+    for (let f = 0; f < numFrames - 1; f++) {
+      flux[b][f] = Math.max(0, bandEnergy[b][f + 1] - bandEnergy[b][f])
+    }
   }
 
-  // Calculate mean and standard deviation of deltas
-  let deltaMean = 0
-  for (let i = 0; i < deltas.length; i++) {
-    deltaMean += deltas[i]
-  }
-  deltaMean /= deltas.length
+  const numFluxFrames = numFrames - 1
+  const framesPerSecond = sampleRate / hopSize
 
-  let deltaVariance = 0
-  for (let i = 0; i < deltas.length; i++) {
-    const diff = deltas[i] - deltaMean
-    deltaVariance += diff * diff
-  }
-  deltaVariance /= deltas.length
-  const deltaStdDev = Math.sqrt(deltaVariance)
+  // Adaptive threshold: sliding median + 2.5 × MAD over ~4s window
+  const windowHalfFrames = Math.floor(framesPerSecond * 2) // 2s each side = 4s total
 
-  const threshold = deltaStdDev * 2
+  function adaptiveThreshold(arr: Float64Array): Float64Array {
+    const thresholds = new Float64Array(arr.length)
+    for (let i = 0; i < arr.length; i++) {
+      const lo = Math.max(0, i - windowHalfFrames)
+      const hi = Math.min(arr.length - 1, i + windowHalfFrames)
+      // Collect window values
+      const windowLen = hi - lo + 1
+      const windowVals = new Float64Array(windowLen)
+      for (let j = 0; j < windowLen; j++) windowVals[j] = arr[lo + j]
+      // Sort for median
+      windowVals.sort()
+      const median = windowVals[Math.floor(windowLen / 2)]
+      // MAD
+      const deviations = new Float64Array(windowLen)
+      for (let j = 0; j < windowLen; j++) deviations[j] = Math.abs(windowVals[j] - median)
+      deviations.sort()
+      const mad = deviations[Math.floor(windowLen / 2)]
+      thresholds[i] = median + 2.5 * Math.max(mad, 1e-10)
+    }
+    return thresholds
+  }
+
+  // Compute thresholds for each band
+  const thresholds = flux.map(f => adaptiveThreshold(f))
+
+  // Score each frame: weighted combination of above-threshold flux
+  // Drop weighting: sub-bass heavy
+  const dropWeights = [0.4, 0.3, 0.2, 0.1]
+  // Build detection: high/mid increase with bass decrease
+  const scores = new Float64Array(numFluxFrames)
+  const buildScores = new Float64Array(numFluxFrames)
+
+  for (let f = 0; f < numFluxFrames; f++) {
+    let dropScore = 0
+    for (let b = 0; b < bands.length; b++) {
+      const excess = flux[b][f] - thresholds[b][f]
+      if (excess > 0) {
+        dropScore += excess * dropWeights[b]
+      }
+    }
+    scores[f] = dropScore
+
+    // Build: high+mid flux exceeds threshold while bass flux is low
+    const highExcess = flux[3][f] - thresholds[3][f]
+    const midExcess = flux[2][f] - thresholds[2][f]
+    const bassFluxLow = flux[0][f] < thresholds[0][f] * 0.5 && flux[1][f] < thresholds[1][f] * 0.5
+    if ((highExcess > 0 || midExcess > 0) && bassFluxLow) {
+      buildScores[f] = Math.max(0, highExcess) * 0.5 + Math.max(0, midExcess) * 0.5
+    }
+  }
+
+  // Collect candidates: only frames where score is positive (above adaptive threshold)
+  type Candidate = { frame: number; score: number; type: 'drop' | 'build' }
+  const allCandidates: Candidate[] = []
+
+  for (let f = 0; f < numFluxFrames; f++) {
+    if (scores[f] > 0) allCandidates.push({ frame: f, score: scores[f], type: 'drop' })
+    if (buildScores[f] > 0) allCandidates.push({ frame: f, score: buildScores[f], type: 'build' })
+  }
+
+  // Sort by score descending — pick the strongest hits first
+  allCandidates.sort((a, b) => b.score - a.score)
+
+  // Greedy selection: max 8 markers, min 8s gap between any two
+  const MAX_MARKERS = 8
+  const minGapFrames = Math.floor(framesPerSecond * 8)
+  const selected: Candidate[] = []
+
+  for (const c of allCandidates) {
+    if (selected.length >= MAX_MARKERS) break
+    let tooClose = false
+    for (const s of selected) {
+      if (Math.abs(c.frame - s.frame) < minGapFrames) {
+        tooClose = true
+        break
+      }
+    }
+    if (!tooClose) selected.push(c)
+  }
+
+  // Sort by time and generate CuePoints
+  selected.sort((a, b) => a.frame - b.frame)
+
   const cuePoints: CuePoint[] = []
   let cueId = 100
 
-  // Minimum gap between detected cue points (in windows = 2 seconds = 4 windows)
-  const minGapWindows = 4
-  let lastDetectedWindow = -minGapWindows
-
-  for (let i = 0; i < deltas.length; i++) {
-    if (i - lastDetectedWindow < minGapWindows) continue
-
-    const delta = deltas[i]
-
-    if (delta > threshold) {
-      // Positive energy spike = Drop
-      const position = (i + 1) * 0.5 // position in seconds
+  for (const c of selected) {
+    const position = ((c.frame + 1) * hopSize) / sampleRate
+    if (c.type === 'drop') {
       cuePoints.push({
         id: cueId++,
-        position,
+        position: Math.round(position * 100) / 100,
         label: 'Drop',
-        color: '#ef4444', // red
+        color: '#ef4444',
         source: 'auto-drop',
       })
-      lastDetectedWindow = i
-    } else if (delta < -threshold) {
-      // Large energy buildup before a drop typically shows as
-      // a negative delta (energy decreasing = build/breakdown)
-      // We look for significant negative deltas followed by a rise
-      const position = (i + 1) * 0.5
+    } else {
       cuePoints.push({
         id: cueId++,
-        position,
+        position: Math.round(position * 100) / 100,
         label: 'Build',
-        color: '#f59e0b', // amber
+        color: '#f59e0b',
         source: 'auto-build',
       })
-      lastDetectedWindow = i
     }
   }
 
@@ -91,114 +186,181 @@ export function detectDrops(audioBuffer: AudioBuffer): CuePoint[] {
 }
 
 /**
- * Detect BPM of an audio track using onset envelope and autocorrelation.
- * Returns the most likely BPM in the 60-200 range.
+ * Detect BPM using spectral-flux onset detection + autocorrelation + log-normal
+ * tempo weighting (Ellis 2007 / librosa approach, same method as vocalremover.org).
+ *
+ * Algorithm:
+ * 1. Compute STFT magnitude spectrum per frame (Hann window, 50% overlap)
+ * 2. Half-wave rectified spectral flux → onset strength envelope
+ * 3. Global autocorrelation of onset envelope for lag range [30–300 BPM]
+ * 4. Log-normal tempo prior centered at 120 BPM (σ = 1 octave)
+ * 5. Peak selection: argmax( log(1 + 1e6·autocorr) + logprior )
+ * 6. Parabolic interpolation for sub-frame accuracy
+ * 7. Octave folding into "felt tempo" range (60–150 BPM)
  */
 export function detectBPM(audioBuffer: AudioBuffer): number {
   const channelData = audioBuffer.getChannelData(0)
   const sampleRate = audioBuffer.sampleRate
 
-  // Downsample to ~11025 Hz for faster processing
-  const downsampleFactor = Math.max(1, Math.floor(sampleRate / 11025))
-  const downsampledRate = sampleRate / downsampleFactor
-  const downsampledLength = Math.floor(channelData.length / downsampleFactor)
-  const downsampled = new Float32Array(downsampledLength)
+  // --- Parameters (matching librosa / Ellis 2007) ---
+  const fftSize = 2048
+  const hopSize = fftSize >> 1 // 50% overlap → ~43 fps at 44.1 kHz
+  const START_BPM = 120.0  // prior center (Ellis 2007 default)
+  const STD_BPM = 1.0      // log-normal std in octaves
+  const MAX_TEMPO = 300.0
+  const MIN_TEMPO = 30.0
 
-  for (let i = 0; i < downsampledLength; i++) {
-    downsampled[i] = channelData[i * downsampleFactor]
-  }
-
-  // Compute onset envelope using spectral flux
-  const hopSize = Math.floor(downsampledRate * 0.01) // ~10ms hop
-  const frameSize = hopSize * 4
-  const numFrames = Math.floor((downsampledLength - frameSize) / hopSize)
-
+  const numFrames = Math.floor((channelData.length - fftSize) / hopSize)
   if (numFrames < 2) return 0
 
-  const envelope = new Float32Array(numFrames)
+  // --- Step 1: Spectral-flux onset strength ---
+  // Pre-allocate FFT work buffers (avoids per-frame allocations)
+  const fftRe = new Float64Array(fftSize)
+  const fftIm = new Float64Array(fftSize)
+  const curMags = new Float64Array(fftSize >> 1)
+  const prevMags = new Float64Array(fftSize >> 1)
+  const onset = new Float64Array(numFrames)
+  const halfN = fftSize >> 1
 
-  // Simple energy-based onset detection
-  for (let i = 0; i < numFrames; i++) {
-    let energy = 0
-    const offset = i * hopSize
-    for (let j = 0; j < frameSize && offset + j < downsampledLength; j++) {
-      energy += downsampled[offset + j] * downsampled[offset + j]
+  for (let f = 0; f < numFrames; f++) {
+    const offset = f * hopSize
+
+    // Hann window → fftRe, zero fftIm
+    for (let i = 0; i < fftSize; i++) {
+      const w = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (fftSize - 1))
+      fftRe[i] = (channelData[offset + i] || 0) * w
     }
-    envelope[i] = Math.sqrt(energy / frameSize)
+    fftIm.fill(0)
+
+    // In-place Cooley-Tukey FFT
+    fftInPlace(fftRe, fftIm, fftSize)
+
+    // Magnitude spectrum
+    for (let i = 0; i < halfN; i++) {
+      curMags[i] = Math.sqrt(fftRe[i] * fftRe[i] + fftIm[i] * fftIm[i])
+    }
+
+    // Spectral flux: sum of positive magnitude differences (half-wave rectified)
+    if (f > 0) {
+      let flux = 0
+      for (let bin = 0; bin < halfN; bin++) {
+        const diff = curMags[bin] - prevMags[bin]
+        if (diff > 0) flux += diff
+      }
+      onset[f] = flux
+    }
+
+    // current → previous (swap via copy)
+    prevMags.set(curMags)
   }
 
-  // Half-wave rectified first difference (onset strength)
-  const onset = new Float32Array(numFrames - 1)
-  for (let i = 0; i < numFrames - 1; i++) {
-    onset[i] = Math.max(0, envelope[i + 1] - envelope[i])
+  // --- Step 2: Global autocorrelation of onset envelope ---
+  const fps = sampleRate / hopSize
+  const maxLag = Math.min(onset.length - 1, Math.floor(60 * fps / MIN_TEMPO))
+  const minLag = Math.max(1, Math.ceil(60 * fps / MAX_TEMPO))
+  if (minLag >= maxLag) return 0
+
+  const autocorr = new Float64Array(maxLag + 1)
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    let sum = 0
+    const len = onset.length - lag
+    for (let i = 0; i < len; i++) {
+      sum += onset[i] * onset[i + lag]
+    }
+    autocorr[lag] = sum / len // normalize by overlap length
   }
 
-  // Autocorrelation of onset envelope
-  // BPM range 60-200 -> period in frames
-  const framesPerSecond = downsampledRate / hopSize
-  const minLag = Math.floor(framesPerSecond * (60 / 200)) // 200 BPM
-  const maxLag = Math.floor(framesPerSecond * (60 / 60))  // 60 BPM
-  const effectiveMaxLag = Math.min(maxLag, onset.length - 1)
+  // Normalize to [0, 1]
+  let maxAC = 0
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    if (autocorr[lag] > maxAC) maxAC = autocorr[lag]
+  }
+  if (maxAC > 0) {
+    for (let lag = minLag; lag <= maxLag; lag++) autocorr[lag] /= maxAC
+  }
 
-  if (minLag >= effectiveMaxLag) return 0
-
+  // --- Step 3: Log-normal tempo weighting + peak selection ---
+  // score(lag) = log(1 + 1e6 · ac[lag]) + logprior(bpm)
+  // logprior = -0.5 · ((log₂(bpm) − log₂(120)) / σ)²
+  const log2Start = Math.log2(START_BPM)
   let bestLag = minLag
-  let bestCorr = -Infinity
+  let bestScore = -Infinity
 
-  for (let lag = minLag; lag <= effectiveMaxLag; lag++) {
-    let correlation = 0
-    const corrLength = Math.min(onset.length - lag, onset.length)
-    for (let i = 0; i < corrLength; i++) {
-      correlation += onset[i] * onset[i + lag]
-    }
-    correlation /= corrLength
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    const bpm = (60 * fps) / lag
+    const logRatio = Math.log2(bpm) - log2Start
+    const logprior = -0.5 * (logRatio / STD_BPM) * (logRatio / STD_BPM)
+    const score = Math.log1p(1e6 * autocorr[lag]) + logprior
 
-    if (correlation > bestCorr) {
-      bestCorr = correlation
+    if (score > bestScore) {
+      bestScore = score
       bestLag = lag
     }
   }
 
-  // Octave correction: the autocorrelation often favors the subharmonic (half BPM).
-  // Check if doubling/halving gives a BPM in the typical 80-170 range with reasonable correlation.
-  let rawBpm = (framesPerSecond * 60) / bestLag
-
-  if (rawBpm < 80) {
-    // Likely detected half-tempo — check correlation at double BPM (half lag)
-    const halfLag = Math.round(bestLag / 2)
-    if (halfLag >= minLag) {
-      let halfCorr = 0
-      const corrLen = Math.min(onset.length - halfLag, onset.length)
-      for (let i = 0; i < corrLen; i++) {
-        halfCorr += onset[i] * onset[i + halfLag]
-      }
-      halfCorr /= corrLen
-      // Accept if correlation is at least 50% of the best — subharmonics
-      // naturally score higher, so the threshold must be generous
-      if (halfCorr > bestCorr * 0.5) {
-        bestLag = halfLag
-        rawBpm = (framesPerSecond * 60) / bestLag
-      }
-    }
-  } else if (rawBpm > 170) {
-    // Likely detected double-tempo — check correlation at half BPM (double lag)
-    const doubleLag = bestLag * 2
-    if (doubleLag <= effectiveMaxLag) {
-      let doubleCorr = 0
-      const corrLen = Math.min(onset.length - doubleLag, onset.length)
-      for (let i = 0; i < corrLen; i++) {
-        doubleCorr += onset[i] * onset[i + doubleLag]
-      }
-      doubleCorr /= corrLen
-      if (doubleCorr > bestCorr * 0.8) {
-        bestLag = doubleLag
-        rawBpm = (framesPerSecond * 60) / bestLag
-      }
+  // --- Step 4: Parabolic interpolation for sub-frame accuracy ---
+  let refinedLag = bestLag
+  if (bestLag > minLag && bestLag < maxLag) {
+    const a = autocorr[bestLag - 1]
+    const b = autocorr[bestLag]
+    const c = autocorr[bestLag + 1]
+    const denom = a - 2 * b + c
+    if (Math.abs(denom) > 1e-10) {
+      refinedLag = bestLag + 0.5 * (a - c) / denom
     }
   }
 
-  // Round to nearest integer
-  return Math.round(rawBpm)
+  // --- Step 5: Octave folding into "felt tempo" range (60–150 BPM) ---
+  // This matches vocalremover.org / web BPM-finder conventions:
+  // most music is perceived in the 60–150 BPM range.
+  let bpm = (60 * fps) / refinedLag
+  while (bpm > 150) bpm /= 2
+  while (bpm < 60) bpm *= 2
+
+  return Math.round(bpm)
+}
+
+/**
+ * In-place iterative Cooley-Tukey FFT (radix-2, decimation-in-time).
+ * Operates on pre-allocated real/imag arrays of the given size.
+ */
+function fftInPlace(real: Float64Array, imag: Float64Array, size: number): void {
+  // Bit-reversal permutation
+  let j = 0
+  for (let i = 0; i < size; i++) {
+    if (j > i) {
+      const tR = real[j]; real[j] = real[i]; real[i] = tR
+      const tI = imag[j]; imag[j] = imag[i]; imag[i] = tI
+    }
+    let m = size >> 1
+    while (m >= 1 && j >= m) { j -= m; m >>= 1 }
+    j += m
+  }
+
+  // Butterfly stages
+  for (let step = 2; step <= size; step <<= 1) {
+    const halfStep = step >> 1
+    const angle = (-2 * Math.PI) / step
+    const wR = Math.cos(angle)
+    const wI = Math.sin(angle)
+
+    for (let group = 0; group < size; group += step) {
+      let cR = 1, cI = 0
+      for (let pair = 0; pair < halfStep; pair++) {
+        const i1 = group + pair
+        const i2 = i1 + halfStep
+        const tR = cR * real[i2] - cI * imag[i2]
+        const tI = cR * imag[i2] + cI * real[i2]
+        real[i2] = real[i1] - tR
+        imag[i2] = imag[i1] - tI
+        real[i1] += tR
+        imag[i1] += tI
+        const nR = cR * wR - cI * wI
+        cI = cR * wI + cI * wR
+        cR = nR
+      }
+    }
+  }
 }
 
 /**
@@ -210,7 +372,7 @@ export function detectKey(audioBuffer: AudioBuffer): string {
   const sampleRate = audioBuffer.sampleRate
 
   // Use a segment from the middle of the track for more stable pitch content
-  const segmentDuration = Math.min(30, audioBuffer.duration) // max 30 seconds
+  const segmentDuration = Math.min(60, audioBuffer.duration) // max 60 seconds
   const segmentSamples = Math.floor(segmentDuration * sampleRate)
   const startSample = Math.floor((channelData.length - segmentSamples) / 2)
   const segment = channelData.slice(
@@ -220,7 +382,8 @@ export function detectKey(audioBuffer: AudioBuffer): string {
 
   // FFT size (power of 2)
   const fftSize = 8192
-  const numFrames = Math.floor(segment.length / fftSize)
+  const hopSizeKey = Math.floor(fftSize / 2) // 50% overlap
+  const numFrames = Math.floor((segment.length - fftSize) / hopSizeKey) + 1
 
   if (numFrames < 1) return 'N/A'
 
@@ -228,7 +391,7 @@ export function detectKey(audioBuffer: AudioBuffer): string {
   const chroma = new Float64Array(12) // C, C#, D, D#, E, F, F#, G, G#, A, A#, B
 
   for (let frame = 0; frame < numFrames; frame++) {
-    const offset = frame * fftSize
+    const offset = frame * hopSizeKey
     const frameData = new Float64Array(fftSize)
     for (let i = 0; i < fftSize; i++) {
       // Apply Hanning window
@@ -240,10 +403,10 @@ export function detectKey(audioBuffer: AudioBuffer): string {
     // For efficiency, we compute power at specific frequencies mapping to each chroma bin
     const magnitudes = computeMagnitudeSpectrum(frameData, fftSize)
 
-    // Map FFT bins to chroma
+    // Map FFT bins to chroma — wider frequency range for better accuracy
     for (let bin = 1; bin < fftSize / 2; bin++) {
       const freq = (bin * sampleRate) / fftSize
-      if (freq < 65 || freq > 2000) continue // A2 to B6 range
+      if (freq < 50 || freq > 4000) continue // wider range: captures bass fundamentals and higher harmonics
 
       const chromaBin = frequencyToChroma(freq)
       chroma[chromaBin] += magnitudes[bin] * magnitudes[bin]
@@ -287,6 +450,262 @@ export function detectKey(audioBuffer: AudioBuffer): string {
   }
 
   return toCamelotNotation(bestKey, bestMode)
+}
+
+/**
+ * Compute spectral features from an AudioBuffer for AI analysis.
+ * Returns centroid, rolloff, zcr, rms, and a 12-bin chroma vector.
+ */
+export function computeSpectralFeatures(audioBuffer: AudioBuffer): {
+  centroid: number
+  rolloff: number
+  zcr: number
+  rms: number
+  chromaVector: number[]
+} {
+  const channelData = audioBuffer.getChannelData(0)
+  const sampleRate = audioBuffer.sampleRate
+  const fftSize = 2048
+  const hopSize = Math.floor(fftSize / 2) // 50% overlap
+  const numFrames = Math.floor((channelData.length - fftSize) / hopSize)
+
+  if (numFrames < 1) return { centroid: 0, rolloff: 0, zcr: 0, rms: 0, chromaVector: new Array(12).fill(0) }
+
+  let totalCentroid = 0
+  let totalRolloff = 0
+  let totalZcr = 0
+  let totalRms = 0
+  const chromaAccum = new Float64Array(12)
+  const frameData = new Float64Array(fftSize)
+
+  for (let f = 0; f < numFrames; f++) {
+    const offset = f * hopSize
+
+    // RMS
+    let sumSq = 0
+    for (let i = 0; i < fftSize; i++) {
+      const s = channelData[offset + i] || 0
+      sumSq += s * s
+    }
+    totalRms += Math.sqrt(sumSq / fftSize)
+
+    // Zero-crossing rate
+    let crossings = 0
+    for (let i = 1; i < fftSize; i++) {
+      const prev = channelData[offset + i - 1] || 0
+      const curr = channelData[offset + i] || 0
+      if ((prev >= 0 && curr < 0) || (prev < 0 && curr >= 0)) crossings++
+    }
+    totalZcr += crossings / fftSize
+
+    // Windowed FFT
+    for (let i = 0; i < fftSize; i++) {
+      const w = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (fftSize - 1)))
+      frameData[i] = (channelData[offset + i] || 0) * w
+    }
+    const mags = computeMagnitudeSpectrum(frameData, fftSize)
+
+    // Spectral centroid: weighted mean of frequencies
+    let magSum = 0
+    let weightedSum = 0
+    for (let bin = 1; bin < fftSize / 2; bin++) {
+      const freq = (bin * sampleRate) / fftSize
+      weightedSum += freq * mags[bin]
+      magSum += mags[bin]
+    }
+    totalCentroid += magSum > 0 ? weightedSum / magSum : 0
+
+    // Spectral rolloff: frequency below which 85% of spectral energy lies
+    const totalEnergy = magSum
+    let cumEnergy = 0
+    let rolloffFreq = 0
+    for (let bin = 1; bin < fftSize / 2; bin++) {
+      cumEnergy += mags[bin]
+      if (cumEnergy >= totalEnergy * 0.85) {
+        rolloffFreq = (bin * sampleRate) / fftSize
+        break
+      }
+    }
+    totalRolloff += rolloffFreq
+
+    // Chroma accumulation
+    for (let bin = 1; bin < fftSize / 2; bin++) {
+      const freq = (bin * sampleRate) / fftSize
+      if (freq < 50 || freq > 4000) continue
+      const chromaBin = frequencyToChroma(freq)
+      chromaAccum[chromaBin] += mags[bin] * mags[bin]
+    }
+  }
+
+  // Normalize chroma vector
+  let maxChroma = 0
+  for (let i = 0; i < 12; i++) {
+    if (chromaAccum[i] > maxChroma) maxChroma = chromaAccum[i]
+  }
+  const chromaVector: number[] = new Array(12)
+  for (let i = 0; i < 12; i++) {
+    chromaVector[i] = maxChroma > 0 ? chromaAccum[i] / maxChroma : 0
+  }
+
+  return {
+    centroid: totalCentroid / numFrames,
+    rolloff: totalRolloff / numFrames,
+    zcr: totalZcr / numFrames,
+    rms: totalRms / numFrames,
+    chromaVector,
+  }
+}
+
+/**
+ * Detect energy level (1-10) based on RMS, spectral rolloff, and BPM.
+ */
+export function detectEnergy(audioBuffer: AudioBuffer, bpm: number, rms: number, rolloff: number): number {
+  const channelData = audioBuffer.getChannelData(0)
+  const sampleRate = audioBuffer.sampleRate
+
+  // Compute peak RMS from top 10% of frames
+  const fftSize = 2048
+  const hopSize = Math.floor(fftSize / 2)
+  const numFrames = Math.floor((channelData.length - fftSize) / hopSize)
+  if (numFrames < 1) return 5
+
+  const frameRms: number[] = []
+  for (let f = 0; f < numFrames; f++) {
+    const offset = f * hopSize
+    let sumSq = 0
+    for (let i = 0; i < fftSize; i++) {
+      const s = channelData[offset + i] || 0
+      sumSq += s * s
+    }
+    frameRms.push(Math.sqrt(sumSq / fftSize))
+  }
+  frameRms.sort((a, b) => b - a)
+  const top10Count = Math.max(1, Math.floor(numFrames * 0.1))
+  let peakRms = 0
+  for (let i = 0; i < top10Count; i++) peakRms += frameRms[i]
+  peakRms /= top10Count
+
+  const rmsScore = peakRms > 0 ? Math.min(1, rms / peakRms) : 0
+  const fullnessScore = Math.min(1, rolloff / (sampleRate / 2))
+  const bpmScore = Math.max(0, Math.min(1, (bpm - 60) / 140))
+
+  const raw = 0.4 * rmsScore + 0.3 * fullnessScore + 0.3 * bpmScore
+  return Math.max(1, Math.min(10, Math.round(raw * 9 + 1)))
+}
+
+/**
+ * Detect intro end and outro start positions in an audio track.
+ */
+export function detectIntroOutro(audioBuffer: AudioBuffer): { introTime: number; outroTime: number } {
+  const channelData = audioBuffer.getChannelData(0)
+  const sampleRate = audioBuffer.sampleRate
+  const frameSamples = Math.floor(sampleRate * 0.05) // 50ms frames
+  const numFrames = Math.floor(channelData.length / frameSamples)
+
+  if (numFrames < 2) return { introTime: 0, outroTime: audioBuffer.duration }
+
+  // Compute RMS per frame
+  const frameRms = new Float32Array(numFrames)
+  let peakRms = 0
+  for (let f = 0; f < numFrames; f++) {
+    let sumSq = 0
+    const offset = f * frameSamples
+    for (let i = 0; i < frameSamples; i++) {
+      const s = channelData[offset + i] || 0
+      sumSq += s * s
+    }
+    frameRms[f] = Math.sqrt(sumSq / frameSamples)
+    if (frameRms[f] > peakRms) peakRms = frameRms[f]
+  }
+
+  const threshold = peakRms * 0.03 // 3% of peak
+
+  // Scan from front: first frame above threshold = intro end
+  let introFrame = 0
+  for (let f = 0; f < numFrames; f++) {
+    if (frameRms[f] > threshold) {
+      introFrame = f
+      break
+    }
+  }
+
+  // Scan from back: last frame above threshold = outro start
+  let outroFrame = numFrames - 1
+  for (let f = numFrames - 1; f >= 0; f--) {
+    if (frameRms[f] > threshold) {
+      outroFrame = f
+      break
+    }
+  }
+
+  return {
+    introTime: (introFrame * frameSamples) / sampleRate,
+    outroTime: (outroFrame * frameSamples) / sampleRate,
+  }
+}
+
+/**
+ * Auto-tag a track based on spectral features, BPM, and energy.
+ */
+export function autoTag(
+  features: { centroid: number; rolloff: number; zcr: number; rms: number },
+  bpm: number,
+  energy: number,
+  musicalKey?: string,
+): string[] {
+  const tags: string[] = []
+
+  if (energy >= 7) tags.push('AI: Energetic')
+  if (energy <= 3 && bpm < 110) tags.push('AI: Chill')
+  if (features.centroid < 1500 && features.rolloff < 3000) tags.push('AI: Dark')
+  if (features.centroid > 4000) tags.push('AI: Bright')
+  if (features.centroid >= 1500 && features.centroid <= 4000 && features.zcr > 0.05) tags.push('AI: Vocal')
+  if (features.zcr < 0.05 && features.centroid < 3000) tags.push('AI: Instrumental')
+  if (features.rolloff < 4000 && features.rms < 0.1) tags.push('AI: Acoustic')
+  if (features.centroid > 3000 && bpm >= 120) tags.push('AI: Electronic')
+  if (musicalKey?.endsWith('A') && energy <= 4 && bpm < 120 && features.centroid < 3000) tags.push('AI: Melancholic')
+
+  return tags
+}
+
+/**
+ * Get harmonically compatible Camelot keys (same, ±1 number, parallel A↔B).
+ */
+export function getCamelotCompatible(camelotKey: string): string[] {
+  const match = camelotKey.match(/^(\d{1,2})([AB])$/)
+  if (!match) return []
+
+  const num = parseInt(match[1], 10)
+  const letter = match[2]
+
+  const results: string[] = [camelotKey]
+
+  // ±1 on the wheel (wraps 1-12)
+  const prev = num === 1 ? 12 : num - 1
+  const next = num === 12 ? 1 : num + 1
+  results.push(`${prev}${letter}`)
+  results.push(`${next}${letter}`)
+
+  // Parallel key (A↔B, same number)
+  const parallel = letter === 'A' ? 'B' : 'A'
+  results.push(`${num}${parallel}`)
+
+  return results
+}
+
+/**
+ * Cosine similarity between two feature vectors.
+ */
+export function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length || a.length === 0) return 0
+  let dot = 0, normA = 0, normB = 0
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i]
+    normA += a[i] * a[i]
+    normB += b[i] * b[i]
+  }
+  const denom = Math.sqrt(normA) * Math.sqrt(normB)
+  return denom > 0 ? dot / denom : 0
 }
 
 /**
@@ -390,8 +809,8 @@ function computeMagnitudeSpectrum(data: Float64Array, size: number): Float64Arra
 function frequencyToChroma(freq: number): number {
   // MIDI note number: 69 + 12 * log2(freq/440)
   const midiNote = 69 + 12 * Math.log2(freq / 440)
-  // Chroma = midiNote mod 12, where C = 0
-  return Math.round(midiNote) % 12
+  // Chroma = midiNote mod 12, where C = 0 — safe modulo for negative values
+  return ((Math.round(midiNote) % 12) + 12) % 12
 }
 
 /**

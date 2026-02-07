@@ -119,7 +119,7 @@ const de = {
 
   // Download
   'download.title': 'Audio herunterladen',
-  'download.urlPlaceholder': 'YouTube, SoundCloud oder Spotify URL...',
+  'download.urlPlaceholder': 'URL einfuegen oder Song suchen...',
   'download.download': 'Herunterladen',
   'download.downloading': 'Herunterladen...',
   'download.converting': 'Konvertiere zu MP3...',
@@ -259,6 +259,11 @@ const de = {
   'batch.rate': 'Bewerten',
   'batch.delete': 'Löschen',
   'batch.export': 'Exportieren',
+  'batch.analyzeAll': 'Alle analysieren',
+  'batch.analyzing': 'Analysiere {current} / {total} — {name}',
+  'batch.analyzeCancel': 'Abbrechen',
+  'batch.analyzeEta': '{time} verbleibend',
+  'batch.analyzeComplete': 'Analyse abgeschlossen',
 
   // Duplicate detection
   'duplicates.title': 'Duplikate erkennen',
@@ -411,6 +416,29 @@ const de = {
   'stemSeparation.selectStems': 'Stems auswählen und benennen',
   'stemSeparation.importSelected': 'Ausgewählte importieren',
   'context.separateStems': 'Stems trennen',
+
+  // Search
+  'search.tab.url': 'URL',
+  'search.tab.search': 'Suche',
+  'search.placeholder': 'Song oder Künstler suchen...',
+  'search.search': 'Suchen',
+  'search.searching': 'Suche läuft...',
+  'search.noResults': 'Keine Ergebnisse gefunden',
+  'search.error': 'Suchfehler: {error}',
+
+  // AI Features
+  'browse.artist': 'Kuenstler',
+  'browse.album': 'Album',
+  'browse.year': 'Jahr',
+  'browse.energy': 'Energie',
+  'context.findCompatible': 'Passende Tracks finden',
+  'context.findSimilar': 'Aehnliche Tracks',
+  'compatible.title': 'Passende Tracks',
+  'compatible.noResults': 'Keine passenden Tracks gefunden. Analysiere zuerst andere Tracks.',
+  'compatible.score': 'Kompatibilitaet',
+  'similar.title': 'Aehnliche Tracks',
+  'similar.noResults': 'Keine aehnlichen Tracks gefunden. Analysiere zuerst andere Tracks.',
+  'similar.similarity': 'Aehnlichkeit',
 }
 
 const en: typeof de = {
@@ -532,7 +560,7 @@ const en: typeof de = {
 
   // Download
   'download.title': 'Download audio',
-  'download.urlPlaceholder': 'YouTube, SoundCloud or Spotify URL...',
+  'download.urlPlaceholder': 'Paste URL or search for songs...',
   'download.download': 'Download',
   'download.downloading': 'Downloading...',
   'download.converting': 'Converting to MP3...',
@@ -672,6 +700,11 @@ const en: typeof de = {
   'batch.rate': 'Rate',
   'batch.delete': 'Delete',
   'batch.export': 'Export',
+  'batch.analyzeAll': 'Analyze all',
+  'batch.analyzing': 'Analyzing {current} / {total} — {name}',
+  'batch.analyzeCancel': 'Cancel',
+  'batch.analyzeEta': '{time} remaining',
+  'batch.analyzeComplete': 'Analysis complete',
 
   // Duplicate detection
   'duplicates.title': 'Detect duplicates',
@@ -824,6 +857,29 @@ const en: typeof de = {
   'stemSeparation.selectStems': 'Select and name stems',
   'stemSeparation.importSelected': 'Import selected',
   'context.separateStems': 'Separate stems',
+
+  // Search
+  'search.tab.url': 'URL',
+  'search.tab.search': 'Search',
+  'search.placeholder': 'Search for song or artist...',
+  'search.search': 'Search',
+  'search.searching': 'Searching...',
+  'search.noResults': 'No results found',
+  'search.error': 'Search error: {error}',
+
+  // AI Features
+  'browse.artist': 'Artist',
+  'browse.album': 'Album',
+  'browse.year': 'Year',
+  'browse.energy': 'Energy',
+  'context.findCompatible': 'Find compatible tracks',
+  'context.findSimilar': 'Similar tracks',
+  'compatible.title': 'Compatible Tracks',
+  'compatible.noResults': 'No compatible tracks found. Analyze other tracks first.',
+  'compatible.score': 'Compatibility',
+  'similar.title': 'Similar Tracks',
+  'similar.noResults': 'No similar tracks found. Analyze other tracks first.',
+  'similar.similarity': 'Similarity',
 }
 
 export const translations: Record<string, typeof de> = {

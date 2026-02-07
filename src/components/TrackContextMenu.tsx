@@ -19,6 +19,8 @@ interface TrackContextMenuProps {
   onToggleFavorite?: (track: Track) => void
   onIdentifyTrack?: (track: Track) => void
   onSeparateStems?: (track: Track) => void
+  onFindCompatible?: (track: Track) => void
+  onFindSimilar?: (track: Track) => void
   tags?: Tag[]
   onTagToggle?: (trackId: number, tagId: number, add: boolean) => void
   projects?: Project[]
@@ -42,6 +44,8 @@ export default function TrackContextMenu({
   onToggleFavorite,
   onIdentifyTrack,
   onSeparateStems,
+  onFindCompatible,
+  onFindSimilar,
   tags,
   onTagToggle,
   projects,
@@ -199,6 +203,24 @@ export default function TrackContextMenu({
         onClose()
       },
       hidden: !onSeparateStems || !isElectron,
+    },
+    {
+      label: t('context.findCompatible'),
+      icon: 'M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2z',
+      onClick: () => {
+        onFindCompatible?.(track)
+        onClose()
+      },
+      hidden: !onFindCompatible || !track.musicalKey || !track.bpm,
+    },
+    {
+      label: t('context.findSimilar'),
+      icon: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z',
+      onClick: () => {
+        onFindSimilar?.(track)
+        onClose()
+      },
+      hidden: !onFindSimilar || !track.audioFeatures || track.audioFeatures.length === 0,
     },
     {
       label: inProject ? t('project.removeFromProject') : t('context.delete'),
