@@ -669,6 +669,113 @@ export function autoTag(
 }
 
 /**
+ * Detect mood from spectral features, BPM, energy, and musical key.
+ * Returns one of 8 moods: Fröhlich, Melancholisch, Aggressiv, Entspannt,
+ * Episch, Mysteriös, Romantisch, Düster.
+ */
+export function detectMood(
+  features: { centroid: number; rolloff: number; zcr: number; rms: number },
+  bpm: number,
+  energy: number,
+  musicalKey?: string,
+): string {
+  const isMinor = musicalKey?.endsWith('A') ?? false
+  const isMajor = musicalKey?.endsWith('B') ?? false
+
+  // Normalize features to 0-1 ranges for scoring
+  const centroidNorm = Math.min(1, features.centroid / 8000)
+  const rolloffNorm = Math.min(1, features.rolloff / 12000)
+  const zcrNorm = Math.min(1, features.zcr / 0.15)
+  const rmsNorm = Math.min(1, features.rms / 0.3)
+  const bpmNorm = Math.max(0, Math.min(1, (bpm - 60) / 140))
+  const energyNorm = (energy - 1) / 9
+
+  const scores: Record<string, number> = {
+    'Fröhlich': 0,
+    'Melancholisch': 0,
+    'Aggressiv': 0,
+    'Entspannt': 0,
+    'Episch': 0,
+    'Mysteriös': 0,
+    'Romantisch': 0,
+    'Düster': 0,
+  }
+
+  // Fröhlich: Major + high energy + high BPM + bright centroid
+  scores['Fröhlich'] =
+    (isMajor ? 0.3 : 0) +
+    energyNorm * 0.25 +
+    bpmNorm * 0.2 +
+    centroidNorm * 0.15 +
+    (1 - zcrNorm) * 0.1
+
+  // Melancholisch: Minor + low energy + low BPM + dark centroid
+  scores['Melancholisch'] =
+    (isMinor ? 0.3 : 0) +
+    (1 - energyNorm) * 0.25 +
+    (1 - bpmNorm) * 0.2 +
+    (1 - centroidNorm) * 0.15 +
+    (1 - rmsNorm) * 0.1
+
+  // Aggressiv: Very high energy + high BPM + high ZCR + high RMS
+  scores['Aggressiv'] =
+    energyNorm * 0.3 +
+    bpmNorm * 0.25 +
+    zcrNorm * 0.2 +
+    rmsNorm * 0.25
+
+  // Entspannt: Low energy + low BPM + low ZCR
+  scores['Entspannt'] =
+    (1 - energyNorm) * 0.35 +
+    (1 - bpmNorm) * 0.3 +
+    (1 - zcrNorm) * 0.2 +
+    (1 - rmsNorm) * 0.15
+
+  // Episch: High energy + high RMS + high rolloff
+  scores['Episch'] =
+    energyNorm * 0.3 +
+    rmsNorm * 0.25 +
+    rolloffNorm * 0.25 +
+    bpmNorm * 0.2
+
+  // Mysteriös: Minor + low centroid + medium energy
+  const midEnergy = 1 - Math.abs(energyNorm - 0.5) * 2
+  scores['Mysteriös'] =
+    (isMinor ? 0.3 : 0) +
+    (1 - centroidNorm) * 0.25 +
+    midEnergy * 0.25 +
+    (1 - rolloffNorm) * 0.2
+
+  // Romantisch: Major + low BPM + medium energy + low ZCR
+  scores['Romantisch'] =
+    (isMajor ? 0.25 : 0) +
+    (1 - bpmNorm) * 0.25 +
+    midEnergy * 0.2 +
+    (1 - zcrNorm) * 0.2 +
+    (1 - rmsNorm) * 0.1
+
+  // Düster: Minor + very low centroid + low rolloff + low energy
+  scores['Düster'] =
+    (isMinor ? 0.25 : 0) +
+    (1 - centroidNorm) * 0.25 +
+    (1 - rolloffNorm) * 0.2 +
+    (1 - energyNorm) * 0.2 +
+    (1 - rmsNorm) * 0.1
+
+  // Pick the highest scoring mood
+  let bestMood = 'Entspannt'
+  let bestScore = -Infinity
+  for (const [mood, score] of Object.entries(scores)) {
+    if (score > bestScore) {
+      bestScore = score
+      bestMood = mood
+    }
+  }
+
+  return bestMood
+}
+
+/**
  * Get harmonically compatible Camelot keys (same, ±1 number, parallel A↔B).
  */
 export function getCamelotCompatible(camelotKey: string): string[] {

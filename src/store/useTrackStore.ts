@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Track, Tag, CuePoint, WaveformNote } from '../types'
 import { CATEGORY_TRACKS } from '../types'
-import { db, getTracks, getTags, addTag, updateTag, deleteTag, updateTrack, addTrack, storeAudioBlob, deleteTrack as dbDeleteTrack, getAudioBlob, setTrackProject as dbSetTrackProject } from '../db/database'
+import { db, getTracks, getTags, addTag, updateTag, deleteTag, updateTrack, addTrack, storeAudioBlob, deleteTrack as dbDeleteTrack, getAudioBlob, setTrackProject as dbSetTrackProject, invalidateArtworkUrl } from '../db/database'
 import { useUndoStore } from './useUndoStore'
 import { useProjectStore } from './useProjectStore'
 import type { AnalysisResult } from '../workers/audioAnalysis.worker'
@@ -51,7 +51,10 @@ interface TrackStore {
   deleteTrackNote: (trackId: number, noteId: string) => Promise<void>
 
   updateTrackEnergy: (id: number, energy: number) => Promise<void>
+  updateTrackMood: (id: number, mood: string) => Promise<void>
   updateTrackAudioFeatures: (id: number, audioFeatures: number[]) => Promise<void>
+  updateTrackArtwork: (id: number, artworkBlob: Blob) => Promise<void>
+  updateMultipleTracksArtwork: (ids: number[], artworkBlob: Blob) => Promise<void>
   updateTrackName: (id: number, name: string) => Promise<void>
   updateTrackArtist: (id: number, artist: string) => Promise<void>
   updateTrackAlbum: (id: number, album: string) => Promise<void>
@@ -305,10 +308,36 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
     updateTrack(id, { energy })
   },
 
+  updateTrackMood: async (id, mood) => {
+    const { tracks } = get()
+    set({ tracks: tracks.map(t => t.id === id ? { ...t, mood } : t) })
+    updateTrack(id, { mood })
+  },
+
   updateTrackAudioFeatures: async (id, audioFeatures) => {
     const { tracks } = get()
     set({ tracks: tracks.map(t => t.id === id ? { ...t, audioFeatures } : t) })
     updateTrack(id, { audioFeatures })
+  },
+
+  updateTrackArtwork: async (id, artworkBlob) => {
+    invalidateArtworkUrl(id)
+    const artworkUrl = URL.createObjectURL(artworkBlob)
+    const { tracks } = get()
+    set({ tracks: tracks.map(t => t.id === id ? { ...t, artworkBlob, artworkUrl } : t) })
+    await updateTrack(id, { artworkBlob })
+    // Update player if this is the current track
+    const ct = usePlayerStore.getState().currentTrack
+    if (ct && ct.id === id) {
+      usePlayerStore.setState({ currentTrack: { ...ct, artworkUrl } })
+    }
+  },
+
+  updateMultipleTracksArtwork: async (ids, artworkBlob) => {
+    const { updateTrackArtwork: updateOne } = get()
+    for (const id of ids) {
+      await updateOne(id, artworkBlob)
+    }
   },
 
   updateTrackName: async (id, name) => {
@@ -345,7 +374,7 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
   },
 
   analyzeTrack: async (trackId) => {
-    const { tracks, updateTrackBPM: storeBPM, updateTrackKey: storeKey, updateTrackCuePoints: storeCues, updateTrackEnergy: storeEnergy, updateTrackAudioFeatures: storeFeatures } = get()
+    const { tracks, updateTrackBPM: storeBPM, updateTrackKey: storeKey, updateTrackCuePoints: storeCues, updateTrackEnergy: storeEnergy, updateTrackMood: storeMood, updateTrackAudioFeatures: storeFeatures } = get()
     const track = tracks.find(t => t.id === trackId)
     if (!track) return
     const blob = await getAudioBlob(trackId)
@@ -360,10 +389,11 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
       const channelData = audioBuffer.getChannelData(0)
       const result = await runAnalysisWorker(channelData, audioBuffer.sampleRate, audioBuffer.duration)
 
-      const { bpm, key, energy, featureVector, drops: autoDrops, introTime, outroTime, aiTags: aiTagNames } = result
+      const { bpm, key, energy, featureVector, drops: autoDrops, introTime, outroTime, aiTags: aiTagNames, mood } = result
       await storeBPM(trackId, bpm)
       await storeKey(trackId, key)
       await storeEnergy(trackId, energy)
+      await storeMood(trackId, mood)
       await storeFeatures(trackId, featureVector)
 
       const introCue = {
@@ -419,7 +449,7 @@ export const useTrackStore = create<TrackStore>((set, get) => ({
       const ct = usePlayerStore.getState().currentTrack
       if (ct && ct.id === trackId) {
         usePlayerStore.setState({
-          currentTrack: { ...ct, bpm, musicalKey: key, energy, cuePoints: mergedCuePoints },
+          currentTrack: { ...ct, bpm, musicalKey: key, energy, mood, cuePoints: mergedCuePoints },
         })
       }
     } catch (err) { console.error('[analyzeTrack] failed for trackId', trackId, err) }

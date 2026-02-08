@@ -1,4 +1,4 @@
-import { detectBPM, detectKey, detectDrops, computeSpectralFeatures, detectEnergy, detectIntroOutro, autoTag } from '../utils/audioAnalysis'
+import { detectBPM, detectKey, detectDrops, computeSpectralFeatures, detectEnergy, detectIntroOutro, autoTag, detectMood } from '../utils/audioAnalysis'
 import type { CuePoint } from '../types'
 
 export interface AnalysisRequest {
@@ -17,6 +17,7 @@ export interface AnalysisResult {
   introTime: number
   outroTime: number
   aiTags: string[]
+  mood: string
 }
 
 /**
@@ -57,6 +58,7 @@ self.onmessage = (e: MessageEvent<AnalysisRequest>) => {
     const energy = detectEnergy(audioBuffer, bpm, features.rms, features.rolloff)
     const { introTime, outroTime } = detectIntroOutro(audioBuffer)
     const aiTags = autoTag(features, bpm, energy, key)
+    const mood = detectMood(features, bpm, energy, key)
 
     const featureVector = [
       features.centroid, features.rolloff, features.zcr, features.rms, bpm,
@@ -73,6 +75,7 @@ self.onmessage = (e: MessageEvent<AnalysisRequest>) => {
       introTime,
       outroTime,
       aiTags,
+      mood,
     }
 
     self.postMessage(result)

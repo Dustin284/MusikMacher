@@ -17,7 +17,7 @@ import type { Track } from '../types'
 const ROW_HEIGHT = 41
 const OVERSCAN = 20
 
-type SortField = 'name' | 'length' | 'createdAt' | 'comment' | 'bpm' | 'musicalKey' | 'rating' | 'energy' | 'artist' | 'album' | 'year'
+type SortField = 'name' | 'length' | 'createdAt' | 'comment' | 'bpm' | 'musicalKey' | 'rating' | 'energy' | 'mood' | 'artist' | 'album' | 'year'
 
 interface TrackGridProps {
   category: number
@@ -156,6 +156,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
         case 'musicalKey': cmp = (a.musicalKey || '').localeCompare(b.musicalKey || ''); break
         case 'rating': cmp = (a.rating || 0) - (b.rating || 0); break
         case 'energy': cmp = (a.energy || 0) - (b.energy || 0); break
+        case 'mood': cmp = (a.mood || '').localeCompare(b.mood || ''); break
         case 'artist': cmp = (a.artist || '').localeCompare(b.artist || ''); break
         case 'album': cmp = (a.album || '').localeCompare(b.album || ''); break
         case 'year': cmp = (a.year || '').localeCompare(b.year || ''); break
@@ -720,6 +721,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
                 { value: 'created', label: t('browse.created') },
                 { value: 'tags', label: t('browse.tags') },
                 { value: 'energy', label: t('browse.energy') },
+                { value: 'mood', label: t('browse.mood') },
                 { value: 'comment', label: t('browse.comment') },
               ].map(col => (
                 <label key={col.value} className="flex items-center gap-2 py-1 text-[13px] text-surface-600 dark:text-surface-400 cursor-pointer">
@@ -838,6 +840,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
                 {isColVisible('bpm') && <SortHeader field="bpm" className="text-right w-16">{t('browse.bpm')}</SortHeader>}
                 {isColVisible('key') && <SortHeader field="musicalKey" className="text-left w-16">{t('browse.key')}</SortHeader>}
                 {isColVisible('energy') && <SortHeader field="energy" className="text-right w-16">{t('browse.energy')}</SortHeader>}
+                {isColVisible('mood') && <SortHeader field="mood" className="text-left w-24">{t('browse.mood')}</SortHeader>}
                 {isColVisible('rating') && <SortHeader field="rating" className="text-center w-24">{t('browse.rating')}</SortHeader>}
                 {isColVisible('created') && <SortHeader field="createdAt" className="text-left w-28">{t('browse.created')}</SortHeader>}
                 {isColVisible('tags') && <th className="text-left px-2.5 py-2 w-28">{t('browse.tags')}</th>}
@@ -1045,6 +1048,29 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
                       {track.energy ? (
                         <span className={track.energy >= 7 ? 'text-red-500' : track.energy >= 4 ? 'text-amber-500' : 'text-blue-500'}>
                           {track.energy}
+                        </span>
+                      ) : (
+                        <span className="text-surface-300 dark:text-surface-700">&mdash;</span>
+                      )}
+                    </td>
+                    )}
+
+                    {/* Mood */}
+                    {isColVisible('mood') && (
+                    <td className="px-2.5 py-1.5">
+                      {track.mood ? (
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                          track.mood === 'Fröhlich' ? 'bg-yellow-500/15 text-yellow-600 dark:text-yellow-400' :
+                          track.mood === 'Melancholisch' ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400' :
+                          track.mood === 'Aggressiv' ? 'bg-red-500/15 text-red-600 dark:text-red-400' :
+                          track.mood === 'Entspannt' ? 'bg-green-500/15 text-green-600 dark:text-green-400' :
+                          track.mood === 'Episch' ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400' :
+                          track.mood === 'Mysteriös' ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400' :
+                          track.mood === 'Romantisch' ? 'bg-pink-500/15 text-pink-600 dark:text-pink-400' :
+                          track.mood === 'Düster' ? 'bg-slate-500/15 text-slate-600 dark:text-slate-400' :
+                          'bg-surface-200/50 text-surface-500'
+                        }`}>
+                          {track.mood}
                         </span>
                       ) : (
                         <span className="text-surface-300 dark:text-surface-700">&mdash;</span>

@@ -108,6 +108,7 @@ export interface Track {
   notes?: WaveformNote[]
   projectId?: number
   energy?: number // 1-10
+  mood?: string // AI-detected mood (e.g. Fröhlich, Melancholisch)
   audioFeatures?: number[] // 17 values: centroid, rolloff, zcr, rms, bpm, 12×chroma
 }
 
@@ -121,7 +122,7 @@ export interface SmartTag {
 }
 
 export interface SmartTagRule {
-  field: 'bpm' | 'musicalKey' | 'rating' | 'name' | 'comment' | 'duration' | 'tags' | 'playCount' | 'isFavorite' | 'lastPlayedAt' | 'energy'
+  field: 'bpm' | 'musicalKey' | 'rating' | 'name' | 'comment' | 'duration' | 'tags' | 'playCount' | 'isFavorite' | 'lastPlayedAt' | 'energy' | 'mood'
   operator: 'equals' | 'contains' | 'gt' | 'lt' | 'between' | 'isEmpty' | 'isNotEmpty' | 'daysAgo'
   value: string
   value2?: string // for 'between'
@@ -215,6 +216,9 @@ export interface AppSettings {
   obsOverlayWidth?: number
   obsOverlayHeight?: number
   obsShowTime?: boolean
+
+  // Spotify-style media browser
+  spotifyViewEnabled?: boolean
 }
 
 export const DEFAULT_SHORTCUTS: KeyboardShortcut[] = [

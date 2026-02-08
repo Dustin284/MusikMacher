@@ -23,6 +23,7 @@ const FIELDS: { value: FieldType; labelKey: string }[] = [
   { value: 'isFavorite', labelKey: 'browse.favorites' },
   { value: 'lastPlayedAt', labelKey: 'smartPlaylist.lastPlayed' },
   { value: 'energy', labelKey: 'browse.energy' },
+  { value: 'mood', labelKey: 'browse.mood' },
 ]
 
 const OPERATORS_BY_TYPE: Record<string, { value: OperatorType; labelKey: string }[]> = {
@@ -66,6 +67,7 @@ function getFieldType(field: FieldType): string {
     case 'name':
     case 'comment':
     case 'musicalKey':
+    case 'mood':
       return 'string'
     case 'tags':
       return 'tags'

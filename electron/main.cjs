@@ -688,18 +688,23 @@ ipcMain.handle('fetch-playlist-info', async (_event, url) => {
   try {
     const ytdlpPath = getYtdlpPath()
 
-    // Spotify playlists — use oEmbed for title
-    if (/open\.spotify\.com\/playlist\//i.test(url)) {
+    // Spotify playlists, albums, artists — use oEmbed for title
+    const spotifyMatch = url.match(/open\.spotify\.com\/(playlist|album|artist)\//i)
+    if (spotifyMatch) {
+      const spotifyType = spotifyMatch[1].toLowerCase()
       const cleanUrl = url.replace(/\/intl-[a-z]{2}\//, '/').split('?')[0]
       const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(cleanUrl)}`
       const res = await net.fetch(oembedUrl, { headers: { 'User-Agent': GENIUS_UA } })
-      if (!res.ok) return { success: false, error: 'Could not fetch Spotify playlist info' }
+      if (!res.ok) return { success: false, error: `Could not fetch Spotify ${spotifyType} info` }
       const data = await res.json()
+      const defaultTitle = spotifyType === 'artist' ? 'Spotify Artist'
+        : spotifyType === 'album' ? 'Spotify Album'
+        : 'Spotify Playlist'
       return {
         success: true,
         playlist: {
-          title: data.title || 'Spotify Playlist',
-          trackCount: 0, // Can't easily get count from oEmbed
+          title: data.title || defaultTitle,
+          trackCount: 0,
           platform: 'spotify',
           tracks: [],
         }
@@ -780,12 +785,17 @@ ipcMain.handle('download-playlist', async (event, url) => {
 
     // Step 1: Get track list
     let tracks = []
-    const isSpotify = /open\.spotify\.com\/playlist\//i.test(url)
+    const spotifyMatch = url.match(/open\.spotify\.com\/(playlist|album|artist)\//i)
+    const isSpotify = !!spotifyMatch
+    const spotifyType = spotifyMatch ? spotifyMatch[1].toLowerCase() : null
 
-    if (isSpotify) {
-      // For Spotify playlists, we need to scrape the embed page for track names
+    if (isSpotify && (spotifyType === 'playlist' || spotifyType === 'album')) {
+      // For Spotify playlists/albums, scrape the embed page for track names
       const cleanUrl = url.replace(/\/intl-[a-z]{2}\//, '/').split('?')[0]
-      const embedUrl = cleanUrl.replace('open.spotify.com/playlist/', 'open.spotify.com/embed/playlist/')
+      const embedUrl = cleanUrl.replace(
+        `open.spotify.com/${spotifyType}/`,
+        `open.spotify.com/embed/${spotifyType}/`
+      )
       try {
         const res = await net.fetch(embedUrl, { headers: { 'User-Agent': GENIUS_UA } })
         const html = await res.text()
@@ -800,14 +810,63 @@ ipcMain.handle('download-playlist', async (event, url) => {
               tracks.push({ url: '', title: name, duration: 0 })
             }
           }
-          // Remove the first entry as it's usually the playlist name
+          // Remove the first entry as it's usually the playlist/album name
           if (tracks.length > 1) tracks.shift()
         }
       } catch {}
 
       if (tracks.length === 0) {
-        return { success: false, error: 'Could not extract tracks from Spotify playlist' }
+        return { success: false, error: `Could not extract tracks from Spotify ${spotifyType}` }
       }
+    } else if (isSpotify && spotifyType === 'artist') {
+      // For Spotify artists, get artist name via oEmbed, then search YouTube for top tracks
+      const cleanUrl = url.replace(/\/intl-[a-z]{2}\//, '/').split('?')[0]
+      const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(cleanUrl)}`
+      let artistName = ''
+      try {
+        const res = await net.fetch(oembedUrl, { headers: { 'User-Agent': GENIUS_UA } })
+        if (res.ok) {
+          const data = await res.json()
+          artistName = data.title || ''
+        }
+      } catch {}
+
+      if (!artistName) {
+        return { success: false, error: 'Could not resolve Spotify artist name' }
+      }
+
+      // Use yt-dlp ytsearch to find top tracks by this artist
+      const ytdlpPath = getYtdlpPath()
+      const searchResult = await new Promise((resolve) => {
+        const proc = spawn(ytdlpPath, [
+          '--flat-playlist', '--dump-json', '--no-check-certificates',
+          `ytsearch20:${artistName} official audio`,
+        ])
+        let stdout = ''
+        proc.stdout.on('data', (data) => { stdout += data.toString() })
+        proc.stderr.on('data', () => {})
+        const timeout = setTimeout(() => { proc.kill(); resolve(null) }, 60000)
+        proc.on('close', () => {
+          clearTimeout(timeout)
+          if (!stdout.trim()) return resolve(null)
+          try {
+            resolve(stdout.trim().split('\n').filter(Boolean).map(line => {
+              const obj = JSON.parse(line)
+              return {
+                url: obj.url || obj.webpage_url || '',
+                title: obj.title || 'Unknown',
+                duration: obj.duration || 0,
+              }
+            }))
+          } catch { resolve(null) }
+        })
+        proc.on('error', () => { clearTimeout(timeout); resolve(null) })
+      })
+
+      if (!searchResult || searchResult.length === 0) {
+        return { success: false, error: `No tracks found for artist "${artistName}"` }
+      }
+      tracks = searchResult
     } else {
       // YouTube / SoundCloud — use yt-dlp
       const infoResult = await new Promise((resolve) => {
@@ -858,8 +917,10 @@ ipcMain.handle('download-playlist', async (event, url) => {
       })
 
       // Determine download URL
+      // For Spotify playlists/albums: no URL, search by title
+      // For Spotify artists: already have YouTube URLs from ytsearch
       let downloadUrl = track.url
-      if (isSpotify || !downloadUrl) {
+      if (!downloadUrl) {
         downloadUrl = `ytsearch1:${trackName}`
       }
 

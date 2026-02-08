@@ -364,11 +364,15 @@ export default function App() {
                 {libraries.length > 1 && lib.id !== 1 && lib.id !== 2 && (
                   <span
                     role="button"
-                    onMouseDown={(e) => {
+                    onMouseDown={async (e) => {
                       e.stopPropagation()
                       e.preventDefault()
-                      removeLib(lib.id!)
-                      if (selectedTab >= libraries.length - 1) setSelectedTab(Math.max(0, selectedTab - 1))
+                      const removed = await removeLib(lib.id!)
+                      if (removed) {
+                        if (selectedTab >= libraries.length - 1) setSelectedTab(Math.max(0, selectedTab - 1))
+                      } else {
+                        alert(t('app.removeLibraryNotEmpty'))
+                      }
                     }}
                     className="ml-0.5 p-0.5 rounded opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-surface-200/80 dark:hover:bg-surface-700/80 transition-all cursor-pointer"
                     title={t('app.removeLibrary')}

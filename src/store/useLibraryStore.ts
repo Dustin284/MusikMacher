@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { getLibraries, addLibrary, updateLibrary, deleteLibrary } from '../db/database'
+import { getLibraries, addLibrary, updateLibrary, deleteLibrary, countTracks } from '../db/database'
 import type { Library } from '../types'
 
 interface LibraryStore {
@@ -8,7 +8,7 @@ interface LibraryStore {
 
   loadLibraries: () => Promise<void>
   addLibrary: (name: string, icon?: string) => Promise<number>
-  removeLibrary: (id: number) => Promise<void>
+  removeLibrary: (id: number) => Promise<boolean>
   renameLibrary: (id: number, name: string) => Promise<void>
   reorderLibrary: (id: number, newOrder: number) => Promise<void>
   toggleOpen: (id: number) => Promise<void>
@@ -63,12 +63,16 @@ export const useLibraryStore = create<LibraryStore>((set, get) => ({
     return id
   },
 
-  removeLibrary: async (id: number) => {
+  removeLibrary: async (id: number): Promise<boolean> => {
     // Prevent deletion of default libraries (Songs=1, Effekte=2)
-    if (id === 1 || id === 2) return
+    if (id === 1 || id === 2) return false
+    // Prevent deletion if library contains tracks
+    const count = await countTracks(id)
+    if (count > 0) return false
     const { libraries } = get()
     await deleteLibrary(id)
     set({ libraries: libraries.filter((lib) => lib.id !== id) })
+    return true
   },
 
   renameLibrary: async (id: number, name: string) => {

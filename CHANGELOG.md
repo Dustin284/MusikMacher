@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.7.0
+
+### Neue Features
+
+- **KI-Stimmungserkennung** — Automatische Erkennung der Stimmung eines Tracks bei der Audio-Analyse. 8 Stimmungen: Froehlich, Melancholisch, Aggressiv, Entspannt, Episch, Mysterioes, Romantisch, Duester. Basiert auf gewichtetem Scoring aus Spectral-Features (Centroid, Rolloff, ZCR, RMS), BPM, Energie und Tonart (Dur/Moll via Camelot-Wheel). Neue farbkodierte Spalte "Stimmung" in der Track-Tabelle mit Pill-Badges.
+- **Media Browser** — Medienansicht mit Kuenstler- und Album-Karten. Umschaltbar zwischen Listen- und Grid-Ansicht per Toggle-Buttons. Navigation: Kuenstler → Kuenstler-Detail (Alben + Tracks) → Album-Detail, oder Alben → Album-Detail. Album-Detail zeigt grosses Cover, Track-Liste mit BPM, Tonart, Stimmung, Energie und "Alle abspielen"-Button.
+- **Cover-Art bearbeiten** — Kuenstler-, Album- und Track-Cover koennen direkt im Media Browser geaendert werden. Kamera-Overlay erscheint bei Hover ueber Karten und Thumbnails. Kuenstler-Cover-Aenderung aktualisiert alle Tracks des Kuenstlers, Album-Cover alle Tracks des Albums.
+- **Spotify Album-Download** — Komplette Spotify-Alben koennen jetzt heruntergeladen werden. Album-URL einfuegen, Tracks werden automatisch erkannt und einzeln via YouTube heruntergeladen.
+- **Spotify Kuenstler-Download** — Spotify-Kuenstler-URLs werden erkannt und die Top-20-Tracks des Kuenstlers automatisch via YouTube-Suche heruntergeladen.
+
+### Verbesserungen
+
+- Smart Playlists unterstuetzen "Stimmung" als Regelfeld (String-Vergleich)
+- Stimmungs-Spalte ist sortierbar und in den Spalten-Einstellungen ein-/ausblendbar
+- Tracks ohne Kuenstler/Album werden unter "Unbekannter Kuenstler" / "Unbekanntes Album" gruppiert
+- Artwork-URL-Cache wird bei Cover-Aenderung korrekt invalidiert (kein Stale-Cover mehr)
+- Cover-Aenderung aktualisiert auch den aktuell spielenden Track im Player
+
+---
+
 ## v1.6.1
 
 ### Verbesserungen

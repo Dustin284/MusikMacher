@@ -4,8 +4,10 @@ import { usePlayerStore } from '../store/usePlayerStore'
 import { useSettingsStore } from '../store/useSettingsStore'
 import { DEFAULT_SHORTCUTS } from '../types'
 import { useUndoStore } from '../store/useUndoStore'
+import { useTranslation } from '../i18n/useTranslation'
 import TagSidebar from './TagSidebar'
 import TrackGrid from './TrackGrid'
+import MediaBrowser from './MediaBrowser'
 import Player from './Player'
 
 // Convert a keyboard event into our shortcut key string format
@@ -32,7 +34,10 @@ export default function Browse({ category, isActive }: BrowseProps) {
   const loadTracks = useTrackStore(s => s.loadTracks)
   const loadTags = useTrackStore(s => s.loadTags)
   const setCategory = useTrackStore(s => s.setCategory)
+  const getFilteredTracks = useTrackStore(s => s.getFilteredTracks)
   const settings = useSettingsStore(s => s.settings)
+  const { t } = useTranslation()
+  const [viewMode, setViewMode] = useState<'list' | 'media'>('list')
 
   useEffect(() => {
     if (!isActive) return
@@ -163,7 +168,44 @@ export default function Browse({ category, isActive }: BrowseProps) {
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex flex-1 min-h-0 overflow-hidden">
         <TagSidebar />
-        <TrackGrid category={category} isActive={isActive} />
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          {/* View toggle */}
+          <div className="flex items-center gap-1 px-3 pt-2 shrink-0">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-1.5 rounded-lg transition-all ${
+                viewMode === 'list'
+                  ? 'bg-primary-500/10 text-primary-500'
+                  : 'text-surface-400 hover:bg-surface-200/60 dark:hover:bg-surface-800/60'
+              }`}
+              title={t('mediaBrowser.listView')}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setViewMode('media')}
+              className={`p-1.5 rounded-lg transition-all ${
+                viewMode === 'media'
+                  ? 'bg-primary-500/10 text-primary-500'
+                  : 'text-surface-400 hover:bg-surface-200/60 dark:hover:bg-surface-800/60'
+              }`}
+              title={t('mediaBrowser.gridView')}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Content */}
+          {viewMode === 'media' ? (
+            <MediaBrowser tracks={getFilteredTracks(settings.andTagCombination)} />
+          ) : (
+            <TrackGrid category={category} isActive={isActive} />
+          )}
+        </div>
       </div>
       <div className="shrink-0">
         <Player />

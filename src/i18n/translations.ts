@@ -8,6 +8,7 @@ const de = {
   'app.newLibrary': 'Neue Bibliothek',
   'app.newLibraryName': 'Name der Bibliothek',
   'app.removeLibrary': 'Bibliothek entfernen',
+  'app.removeLibraryNotEmpty': 'Bibliothek enthält Songs und kann nicht gelöscht werden. Entferne zuerst alle Songs.',
 
   // Tabs
   'tabs.songs': 'Songs',
@@ -166,7 +167,7 @@ const de = {
   'settings.language': 'Sprache',
   'settings.options': 'Optionen',
   'settings.loadCovers': 'Album-Cover laden',
-  'settings.version': 'Lorus Musik Macher v1.6.1',
+  'settings.version': 'Lorus Musik Macher v1.7.0',
   'settings.techStack': 'React + HeadlessUI + TailwindCSS + Electron',
   'settings.logs': 'Logs',
   'settings.showLogs': 'Logs anzeigen',
@@ -492,6 +493,22 @@ const de = {
   'similar.title': 'Aehnliche Tracks',
   'similar.noResults': 'Keine aehnlichen Tracks gefunden. Analysiere zuerst andere Tracks.',
   'similar.similarity': 'Aehnlichkeit',
+
+  // Mood
+  'browse.mood': 'Stimmung',
+
+  // Spotify View / Media Browser
+  'settings.spotifyView': 'Spotify-Ansicht aktivieren',
+  'mediaBrowser.artists': 'Kuenstler',
+  'mediaBrowser.albums': 'Alben',
+  'mediaBrowser.tracks': 'Tracks',
+  'mediaBrowser.unknownArtist': 'Unbekannter Kuenstler',
+  'mediaBrowser.unknownAlbum': 'Unbekanntes Album',
+  'mediaBrowser.playAll': 'Alle abspielen',
+  'mediaBrowser.back': 'Zurueck',
+  'mediaBrowser.listView': 'Listenansicht',
+  'mediaBrowser.gridView': 'Grid-Ansicht',
+  'mediaBrowser.changeCover': 'Cover aendern',
 }
 
 const en: typeof de = {
@@ -502,6 +519,7 @@ const en: typeof de = {
   'app.newLibrary': 'New Library',
   'app.newLibraryName': 'Library name',
   'app.removeLibrary': 'Remove library',
+  'app.removeLibraryNotEmpty': 'Library contains songs and cannot be deleted. Remove all songs first.',
 
   // Tabs
   'tabs.songs': 'Songs',
@@ -660,7 +678,7 @@ const en: typeof de = {
   'settings.language': 'Language',
   'settings.options': 'Options',
   'settings.loadCovers': 'Load album covers',
-  'settings.version': 'Lorus Musik Macher v1.6.1',
+  'settings.version': 'Lorus Musik Macher v1.7.0',
   'settings.techStack': 'React + HeadlessUI + TailwindCSS + Electron',
   'settings.logs': 'Logs',
   'settings.showLogs': 'Show logs',
@@ -986,6 +1004,22 @@ const en: typeof de = {
   'similar.title': 'Similar Tracks',
   'similar.noResults': 'No similar tracks found. Analyze other tracks first.',
   'similar.similarity': 'Similarity',
+
+  // Mood
+  'browse.mood': 'Mood',
+
+  // Spotify View / Media Browser
+  'settings.spotifyView': 'Enable Spotify view',
+  'mediaBrowser.artists': 'Artists',
+  'mediaBrowser.albums': 'Albums',
+  'mediaBrowser.tracks': 'Tracks',
+  'mediaBrowser.unknownArtist': 'Unknown Artist',
+  'mediaBrowser.unknownAlbum': 'Unknown Album',
+  'mediaBrowser.playAll': 'Play all',
+  'mediaBrowser.back': 'Back',
+  'mediaBrowser.listView': 'List view',
+  'mediaBrowser.gridView': 'Grid view',
+  'mediaBrowser.changeCover': 'Change cover',
 }
 
 export const translations: Record<string, typeof de> = {

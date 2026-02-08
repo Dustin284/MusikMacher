@@ -26,7 +26,7 @@ function isUrl(text: string): boolean {
 
 function isPlaylistUrl(url: string): boolean {
   if (/youtube\.com\/playlist\?list=|[?&]list=/i.test(url)) return true
-  if (/open\.spotify\.com\/playlist\//i.test(url)) return true
+  if (/open\.spotify\.com\/(playlist|album|artist)\//i.test(url)) return true
   if (/soundcloud\.com\/.+\/sets\//i.test(url)) return true
   return false
 }

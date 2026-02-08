@@ -194,6 +194,12 @@ function resolveArtworkUrl(trackId: number, artworkBlob: unknown): string | unde
   return undefined
 }
 
+export function invalidateArtworkUrl(trackId: number): void {
+  const old = artworkUrlCache.get(trackId)
+  if (old) URL.revokeObjectURL(old)
+  artworkUrlCache.delete(trackId)
+}
+
 export async function getSettings(): Promise<AppSettings> {
   const row = await db.settings.get('app')
   return row?.data ?? { ...DEFAULT_SETTINGS }
@@ -218,6 +224,10 @@ export async function deleteTrack(id: number): Promise<void> {
   if (window.electronAPI?.deleteCachedAudio) {
     window.electronAPI.deleteCachedAudio(id).catch(() => {})
   }
+}
+
+export async function countTracks(category: number): Promise<number> {
+  return db.tracks.where('category').equals(category).count()
 }
 
 export async function getTracks(category: number): Promise<Track[]> {
