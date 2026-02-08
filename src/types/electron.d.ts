@@ -122,6 +122,12 @@ export interface ElectronAPI {
   obsUpdateSettings?: (settings: Partial<import('./index').AppSettings>) => void
   obsSelectTextFilePath?: () => Promise<string | null>
 
+  // Whisper (LRC generation)
+  checkWhisper?: () => Promise<boolean>
+  installWhisper?: () => Promise<boolean | { success: boolean; error?: string }>
+  generateLrc?: (trackId: number) => Promise<{ success: boolean; lrc?: string; error?: string }>
+  onLrcProgress?: (cb: (data: { percent: number; phase: string }) => void) => void
+
   // Stem separation (Demucs)
   checkPython?: () => Promise<boolean>
   checkDemucs?: () => Promise<boolean>

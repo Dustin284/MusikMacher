@@ -118,6 +118,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('separation-progress', (_event, data) => cb(data))
   },
 
+  // Whisper (LRC generation)
+  checkWhisper: () => ipcRenderer.invoke('check-whisper'),
+  installWhisper: () => ipcRenderer.invoke('install-whisper'),
+  generateLrc: (trackId) => ipcRenderer.invoke('generate-lrc', trackId),
+  onLrcProgress: (cb) => {
+    ipcRenderer.removeAllListeners('lrc-progress')
+    ipcRenderer.on('lrc-progress', (_event, data) => cb(data))
+  },
+
   // Debug
   debugBinState: () => ipcRenderer.invoke('debug-bin-state'),
 })

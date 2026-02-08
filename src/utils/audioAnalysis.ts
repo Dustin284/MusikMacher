@@ -660,7 +660,8 @@ export function autoTag(
   if (features.centroid < 1500 && features.rolloff < 3000) tags.push('AI: Dark')
   if (features.centroid > 4000) tags.push('AI: Bright')
   if (features.centroid >= 1500 && features.centroid <= 4000 && features.zcr > 0.05) tags.push('AI: Vocal')
-  if (features.zcr < 0.05 && features.centroid < 3000) tags.push('AI: Instrumental')
+  // Instrumental: only when truly no singing — very strict thresholds
+  if (features.zcr < 0.02 && features.centroid < 2000) tags.push('AI: Instrumental')
   if (features.rolloff < 4000 && features.rms < 0.1) tags.push('AI: Acoustic')
   if (features.centroid > 3000 && bpm >= 120) tags.push('AI: Electronic')
   if (musicalKey?.endsWith('A') && energy <= 4 && bpm < 120 && features.centroid < 3000) tags.push('AI: Melancholic')

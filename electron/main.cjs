@@ -7,6 +7,14 @@ const { spawn, execSync, execFile } = require('child_process')
 
 const isDev = !app.isPackaged
 
+// GPU / hardware acceleration flags for smoother rendering
+app.commandLine.appendSwitch('enable-gpu-rasterization')
+app.commandLine.appendSwitch('enable-zero-copy')
+app.commandLine.appendSwitch('enable-features', 'CanvasOopRasterization,Vulkan')
+app.commandLine.appendSwitch('ignore-gpu-blocklist')
+app.commandLine.appendSwitch('enable-accelerated-2d-canvas')
+app.commandLine.appendSwitch('disable-renderer-backgrounding')
+
 // Register custom protocols BEFORE app.whenReady()
 protocol.registerSchemesAsPrivileged([
   // Stream audio directly from disk cache — no IPC buffer transfer
@@ -32,6 +40,7 @@ function createWindow() {
       contextIsolation: true,
       webSecurity: true,
       preload: path.join(__dirname, 'preload.cjs'),
+      backgroundThrottling: false,
     },
     show: false,
     titleBarStyle: 'hiddenInset',
@@ -689,22 +698,47 @@ ipcMain.handle('fetch-playlist-info', async (_event, url) => {
     const ytdlpPath = getYtdlpPath()
 
     // Spotify playlists, albums, artists — use oEmbed for title
-    const spotifyMatch = url.match(/open\.spotify\.com\/(playlist|album|artist)\//i)
+    const spotifyMatch = url.match(/open\.spotify\.com\/(?:intl-[a-z]{2}\/)?(playlist|album|artist)\//i)
     if (spotifyMatch) {
       const spotifyType = spotifyMatch[1].toLowerCase()
       const cleanUrl = url.replace(/\/intl-[a-z]{2}\//, '/').split('?')[0]
-      const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(cleanUrl)}`
-      const res = await net.fetch(oembedUrl, { headers: { 'User-Agent': GENIUS_UA } })
-      if (!res.ok) return { success: false, error: `Could not fetch Spotify ${spotifyType} info` }
-      const data = await res.json()
-      const defaultTitle = spotifyType === 'artist' ? 'Spotify Artist'
+
+      // Get title via oEmbed
+      let title = spotifyType === 'artist' ? 'Spotify Artist'
         : spotifyType === 'album' ? 'Spotify Album'
         : 'Spotify Playlist'
+      try {
+        const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(cleanUrl)}`
+        const res = await net.fetch(oembedUrl, { headers: { 'User-Agent': GENIUS_UA } })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.title) title = data.title
+        }
+      } catch {}
+
+      // Get track count from embed page (for albums/playlists)
+      let trackCount = 0
+      if (spotifyType === 'playlist' || spotifyType === 'album') {
+        try {
+          const embedUrl = cleanUrl.replace(
+            `open.spotify.com/${spotifyType}/`,
+            `open.spotify.com/embed/${spotifyType}/`
+          )
+          const embedRes = await net.fetch(embedUrl, { headers: { 'User-Agent': GENIUS_UA } })
+          const html = await embedRes.text()
+          const trackListMatch = html.match(/"trackList"\s*:\s*(\[[\s\S]*?\])\s*[,}]/)
+          if (trackListMatch) {
+            const trackList = JSON.parse(trackListMatch[1])
+            trackCount = trackList.length
+          }
+        } catch {}
+      }
+
       return {
         success: true,
         playlist: {
-          title: data.title || defaultTitle,
-          trackCount: 0,
+          title,
+          trackCount,
           platform: 'spotify',
           tracks: [],
         }
@@ -785,7 +819,7 @@ ipcMain.handle('download-playlist', async (event, url) => {
 
     // Step 1: Get track list
     let tracks = []
-    const spotifyMatch = url.match(/open\.spotify\.com\/(playlist|album|artist)\//i)
+    const spotifyMatch = url.match(/open\.spotify\.com\/(?:intl-[a-z]{2}\/)?(playlist|album|artist)\//i)
     const isSpotify = !!spotifyMatch
     const spotifyType = spotifyMatch ? spotifyMatch[1].toLowerCase() : null
 
@@ -797,23 +831,50 @@ ipcMain.handle('download-playlist', async (event, url) => {
         `open.spotify.com/embed/${spotifyType}/`
       )
       try {
+        console.log('[Playlist] Fetching Spotify embed:', embedUrl)
         const res = await net.fetch(embedUrl, { headers: { 'User-Agent': GENIUS_UA } })
         const html = await res.text()
-        // Extract track titles from the embed HTML
-        const titleMatches = html.match(/"name":"([^"]+)"/g)
-        if (titleMatches) {
-          const seen = new Set()
-          for (const m of titleMatches) {
-            const name = m.match(/"name":"([^"]+)"/)?.[1]
-            if (name && !seen.has(name) && name.length > 1 && name.length < 200) {
-              seen.add(name)
-              tracks.push({ url: '', title: name, duration: 0 })
+
+        // Method 1: Extract from trackList JSON array (most reliable)
+        // Pattern: "trackList":[{"uri":"...","title":"Track Name","subtitle":"Artist",...},...]
+        const trackListMatch = html.match(/"trackList"\s*:\s*(\[[\s\S]*?\])\s*[,}]/)
+        if (trackListMatch) {
+          try {
+            const trackList = JSON.parse(trackListMatch[1])
+            for (const item of trackList) {
+              const title = item.title || item.name
+              const artist = item.subtitle || ''
+              if (title && title.length > 0 && title.length < 200) {
+                const searchTitle = artist ? `${artist} - ${title}` : title
+                tracks.push({ url: '', title: searchTitle, duration: Math.round((item.duration || 0) / 1000) })
+              }
             }
+            console.log(`[Playlist] Extracted ${tracks.length} tracks from trackList JSON`)
+          } catch (parseErr) {
+            console.error('[Playlist] Failed to parse trackList JSON:', parseErr.message)
           }
-          // Remove the first entry as it's usually the playlist/album name
-          if (tracks.length > 1) tracks.shift()
         }
-      } catch {}
+
+        // Method 2: Fallback — extract "name":"..." patterns (legacy)
+        if (tracks.length === 0) {
+          console.log('[Playlist] trackList not found, trying legacy "name" extraction')
+          const titleMatches = html.match(/"name":"([^"]+)"/g)
+          if (titleMatches) {
+            const seen = new Set()
+            for (const m of titleMatches) {
+              const name = m.match(/"name":"([^"]+)"/)?.[1]
+              if (name && !seen.has(name) && name.length > 1 && name.length < 200) {
+                seen.add(name)
+                tracks.push({ url: '', title: name, duration: 0 })
+              }
+            }
+            // Remove the first entry as it's usually the playlist/album name
+            if (tracks.length > 1) tracks.shift()
+          }
+        }
+      } catch (fetchErr) {
+        console.error('[Playlist] Spotify embed fetch failed:', fetchErr.message)
+      }
 
       if (tracks.length === 0) {
         return { success: false, error: `Could not extract tracks from Spotify ${spotifyType}` }
@@ -2348,6 +2409,326 @@ function findStemDir(baseDir) {
   }
   return null
 }
+
+// --- Whisper (faster-whisper) for LRC generation ---
+
+function hasWhisper() {
+  if (hasEmbeddedPython()) {
+    try {
+      const pythonPath = getEmbeddedPythonPath()
+      execSync(`"${pythonPath}" -c "import faster_whisper"`, { stdio: 'pipe', timeout: 30000 })
+      return true
+    } catch {
+      return false
+    }
+  }
+  try {
+    execSync('python -c "import faster_whisper"', { stdio: 'pipe', timeout: 15000 })
+    return true
+  } catch {
+    try {
+      execSync('python3 -c "import faster_whisper"', { stdio: 'pipe', timeout: 15000 })
+      return true
+    } catch {
+      return false
+    }
+  }
+}
+
+ipcMain.handle('check-whisper', async () => {
+  return hasWhisper()
+})
+
+ipcMain.handle('install-whisper', async (event) => {
+  const fail = (msg) => {
+    console.error('[Whisper]', msg)
+    return { success: false, error: msg }
+  }
+
+  try {
+    if (hasWhisper()) {
+      console.log('[Whisper] Already installed')
+      return { success: true }
+    }
+
+    if (process.platform !== 'win32') {
+      return fail('Nur Windows wird unterstuetzt')
+    }
+
+    event.sender.send('lrc-progress', { percent: 1, phase: 'downloading' })
+
+    // Install embedded Python if needed
+    if (!hasEmbeddedPython()) {
+      console.log('[Whisper] Installing embedded Python first...')
+      const pythonInstalled = await installEmbeddedPython(event)
+      if (!pythonInstalled) {
+        return fail('Python-Installation fehlgeschlagen. Pruefe deine Internetverbindung.')
+      }
+    }
+
+    const pythonExe = getEmbeddedPythonPath()
+    if (!fs.existsSync(pythonExe)) {
+      return fail(`Python nicht gefunden: ${pythonExe}`)
+    }
+
+    console.log('[Whisper] Using Python:', pythonExe)
+    event.sender.send('lrc-progress', { percent: 20, phase: 'installing' })
+
+    // Install faster-whisper via pip with progress
+    const installWithProgress = (args, progressStart, progressEnd, phaseName) => {
+      return new Promise((resolve, reject) => {
+        console.log(`[Whisper] Running: pip ${args.join(' ')}`)
+        event.sender.send('lrc-progress', { percent: progressStart, phase: phaseName })
+
+        const proc = spawn(pythonExe, ['-m', 'pip', 'install', ...args], {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          shell: false
+        })
+
+        let output = ''
+        let currentProgress = progressStart
+
+        const interval = setInterval(() => {
+          if (currentProgress < progressEnd - 5) {
+            currentProgress += 1
+            event.sender.send('lrc-progress', { percent: currentProgress, phase: phaseName })
+          }
+        }, 2000)
+
+        proc.stdout.on('data', (data) => {
+          output += data.toString()
+        })
+
+        proc.stderr.on('data', (data) => {
+          const text = data.toString()
+          output += text
+          const match = text.match(/(\d+)%/)
+          if (match) {
+            const pipPercent = parseInt(match[1])
+            currentProgress = progressStart + Math.round((pipPercent / 100) * (progressEnd - progressStart))
+            event.sender.send('lrc-progress', { percent: currentProgress, phase: phaseName })
+          }
+        })
+
+        proc.on('close', (code) => {
+          clearInterval(interval)
+          if (code === 0) {
+            event.sender.send('lrc-progress', { percent: progressEnd, phase: phaseName })
+            resolve(true)
+          } else {
+            reject(new Error(`pip install failed (code ${code}): ${output.slice(-300)}`))
+          }
+        })
+
+        proc.on('error', (err) => {
+          clearInterval(interval)
+          reject(err)
+        })
+      })
+    }
+
+    try {
+      await installWithProgress(
+        ['faster-whisper'],
+        20, 60, 'installing faster-whisper'
+      )
+    } catch (e) {
+      return fail('faster-whisper Installation fehlgeschlagen: ' + e.message)
+    }
+
+    // Always install CUDA DLLs for CTranslate2 (cublas, cudnn, cuda-runtime)
+    // Even without detected GPU — the libs are needed if user installs a GPU later
+    // and cachedCudaInfo may not be available yet at install time
+    console.log('[Whisper] Installing CUDA libraries for CTranslate2...')
+    try {
+      await installWithProgress(
+        ['nvidia-cublas-cu12', 'nvidia-cudnn-cu12', 'nvidia-cuda-runtime-cu12'],
+        60, 90, 'installing CUDA libraries'
+      )
+      console.log('[Whisper] CUDA libraries installed successfully')
+    } catch (e) {
+      console.warn('[Whisper] CUDA libraries install failed (will use CPU):', e.message)
+      // Non-fatal: will fallback to CPU at runtime
+    }
+
+    event.sender.send('lrc-progress', { percent: 95, phase: 'verifying' })
+    await new Promise(r => setTimeout(r, 2000))
+
+    const installed = hasWhisper()
+    event.sender.send('lrc-progress', { percent: 100, phase: 'done' })
+    console.log('[Whisper] Installation complete, verified:', installed)
+
+    return { success: true }
+  } catch (err) {
+    console.error('[Whisper] Installation error:', err)
+    return { success: false, error: err.message || String(err) }
+  }
+})
+
+ipcMain.handle('generate-lrc', async (event, trackId) => {
+  try {
+    const pythonPath = getEmbeddedPythonPath()
+    if (!fs.existsSync(pythonPath)) {
+      return { success: false, error: 'Python nicht installiert.' }
+    }
+
+    if (!hasWhisper()) {
+      return { success: false, error: 'faster-whisper nicht installiert.' }
+    }
+
+    // Get audio from disk cache
+    const audioPath = path.join(audioCacheDir, String(trackId))
+    if (!fs.existsSync(audioPath)) {
+      return { success: false, error: 'Audio-Datei nicht im Cache gefunden.' }
+    }
+
+    // Determine device — use CUDA if available
+    const useCuda = cachedCudaInfo?.available || false
+    const device = useCuda ? 'cuda' : 'cpu'
+    const computeType = useCuda ? 'float16' : 'int8'
+
+    console.log('[Whisper] Generating LRC for track', trackId, 'device:', device)
+
+    // Write the Python script to temp file (avoids Windows cmd quoting issues)
+    const scriptPath = path.join(app.getPath('temp'), 'lorus_whisper_lrc.py')
+    fs.writeFileSync(scriptPath, `
+import sys, json, os, glob
+
+audio_path = sys.argv[1]
+device = sys.argv[2]
+compute_type = sys.argv[3]
+output_file = sys.argv[4]
+
+# Add nvidia DLL dirs to PATH before importing ctranslate2
+for sp in sys.path:
+    nvidia_dir = os.path.join(sp, "nvidia")
+    if os.path.isdir(nvidia_dir):
+        for pattern in ("*/bin", "*/lib"):
+            for dll_dir in glob.glob(os.path.join(nvidia_dir, pattern)):
+                if os.path.isdir(dll_dir):
+                    os.environ["PATH"] = dll_dir + os.pathsep + os.environ.get("PATH", "")
+                    try:
+                        os.add_dll_directory(dll_dir)
+                    except (OSError, AttributeError):
+                        pass
+
+# Force CPU mode: hide CUDA from ctranslate2 entirely
+if device == "cpu":
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
+print(json.dumps({"phase": "loading", "percent": 5}), flush=True)
+
+from faster_whisper import WhisperModel
+model = WhisperModel("large-v3", device=device, compute_type=compute_type)
+
+print(json.dumps({"phase": "transcribing", "percent": 15}), flush=True)
+
+segments, info = model.transcribe(audio_path, word_timestamps=True)
+
+lines = []
+total_duration = info.duration if info.duration else 1
+processed = 0
+
+for segment in segments:
+    start = segment.start
+    minutes = int(start // 60)
+    seconds = start % 60
+    timestamp = f"[{minutes:02d}:{seconds:05.2f}]"
+    text = segment.text.strip()
+    if text:
+        lines.append(f"{timestamp}{text}")
+    processed = segment.end
+    pct = min(95, 15 + int((processed / total_duration) * 80))
+    print(json.dumps({"phase": "transcribing", "percent": pct}), flush=True)
+
+print(json.dumps({"phase": "done", "percent": 100}), flush=True)
+
+lrc_content = "\\n".join(lines)
+with open(output_file, "w", encoding="utf-8") as f:
+    f.write(lrc_content)
+`, 'utf8')
+
+    const lrcOutputPath = path.join(app.getPath('temp'), `lorus_lrc_${trackId}.txt`)
+
+    // Helper: run whisper Python script with given device, return Promise
+    const runWhisper = (dev, ct) => {
+      return new Promise((resolve) => {
+        const proc = spawn(pythonPath, [scriptPath, audioPath, dev, ct, lrcOutputPath], {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          shell: false,
+          env: { ...process.env, PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1' },
+        })
+
+        let stderrData = ''
+
+        proc.stdout.on('data', (data) => {
+          for (const line of data.toString().split('\n')) {
+            const trimmed = line.trim()
+            if (trimmed.startsWith('{')) {
+              try {
+                const progress = JSON.parse(trimmed)
+                if (progress.percent !== undefined) {
+                  event.sender.send('lrc-progress', { percent: progress.percent, phase: progress.phase || 'transcribing' })
+                }
+              } catch {}
+            }
+          }
+        })
+
+        proc.stderr.on('data', (data) => { stderrData += data.toString() })
+
+        proc.on('close', (code) => {
+          if (code === 0) {
+            resolve({ success: true })
+          } else {
+            const isCudaError = /cublas|cuda.*dll|library.*not found|cublaslt/i.test(stderrData)
+            resolve({ success: false, isCudaError, error: stderrData })
+          }
+        })
+
+        proc.on('error', (err) => {
+          resolve({ success: false, isCudaError: false, error: err.message })
+        })
+      })
+    }
+
+    event.sender.send('lrc-progress', { percent: 2, phase: 'starting' })
+
+    // Try with requested device (cuda/cpu)
+    let result = await runWhisper(device, computeType)
+
+    // If CUDA failed, retry with CPU in a NEW process (avoids broken ctranslate2 import cache)
+    if (!result.success && result.isCudaError && device !== 'cpu') {
+      console.log('[Whisper] CUDA failed, retrying with CPU...')
+      event.sender.send('lrc-progress', { percent: 5, phase: 'CPU fallback' })
+      result = await runWhisper('cpu', 'int8')
+    }
+
+    try { fs.unlinkSync(scriptPath) } catch {}
+
+    // Check output file FIRST — even if exit code was non-zero (ctranslate2 can crash on shutdown)
+    try {
+      if (fs.existsSync(lrcOutputPath)) {
+        const lrcContent = fs.readFileSync(lrcOutputPath, 'utf8').trim()
+        try { fs.unlinkSync(lrcOutputPath) } catch {}
+        if (lrcContent) {
+          event.sender.send('lrc-progress', { percent: 100, phase: 'done' })
+          return { success: true, lrc: lrcContent }
+        }
+      }
+    } catch {}
+
+    if (result.success) {
+      return { success: false, error: 'Keine Transkription erhalten — moeglicherweise ein Instrumental-Track ohne Gesang.' }
+    } else {
+      const lines = (result.error || '').split('\n')
+      const errorLine = lines.find(l => /Error|Exception/i.test(l)) || lines.slice(-3).join('\n') || 'Unbekannter Fehler'
+      return { success: false, error: errorLine.slice(0, 500) }
+    }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
 
 // --- Clipboard notification popup (custom BrowserWindow) ---
 let notifWindow = null

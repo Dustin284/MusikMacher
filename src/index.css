@@ -183,6 +183,12 @@ input[type="checkbox"]:focus-visible {
   opacity: 0.03;
 }
 
+/* GPU compositing hints for smooth scrolling */
+.gpu-scroll {
+  will-change: transform;
+  contain: layout style paint;
+}
+
 /* Transitions */
 .transition-smooth {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);

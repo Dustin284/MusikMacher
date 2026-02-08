@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.7.1
+
+### Neue Features
+
+- **KI-basierte LRC-Generierung (Whisper)** — Lokale Lyrics-Transkription mit Zeitstempeln per Rechtsklick → "LRC generieren". Nutzt faster-whisper mit dem `large-v3` Model (beste Qualitaet, mehrsprachig). Automatische Installation bei Erstnutzung. GPU-Beschleunigung (NVIDIA CUDA) wird erkannt und genutzt. Generierte LRC-Lyrics werden im Lyrics-Panel mit Timestamps angezeigt. Unterstuetzt 99+ Sprachen inkl. Deutsch, Englisch und mehrsprachige Songs.
+
+### Verbesserungen
+
+- **Hardware-Beschleunigung (GPU)** — GPU-Rasterization, Zero-Copy, Vulkan-Rendering, Accelerated 2D Canvas und Background-Throttling deaktiviert fuer deutlich fluessigeres Scrollen und weniger UI-Lag.
+- **CSS GPU-Hints** — `will-change` und `contain` Properties fuer GPU-beschleunigtes Compositing bei scrollbaren Listen.
+
+### Bugfixes
+
+- **Spotify Album-Download brach nach 1 Song ab** — Die alte `"name":"..."`-Regex auf der Embed-Seite extrahierte keine Tracks mehr (Spotify HTML-Aenderung). Neuer Parser nutzt das `trackList`-JSON-Array mit `"title"`-Feldern, inklusive Kuenstlernamen fuer bessere YouTube-Suche. Zudem zeigt die Playlist-Info jetzt die korrekte Track-Anzahl an.
+- **Spotify URLs mit `/intl-XX/` wurden nicht als Album/Playlist erkannt** — URLs wie `open.spotify.com/intl-de/album/...` umgingen die Playlist-Erkennung und luden nur 1 Song. Regex in Frontend und Backend erlaubt jetzt optionales `/intl-XX/`-Segment.
+- **LRC-Generierung schlug fehl wegen fehlender CUDA-DLLs** — `cublas64_12.dll not found` Fehler bei NVIDIA-GPUs. CUDA-Bibliotheken (`nvidia-cublas-cu12`, `nvidia-cudnn-cu12`) werden jetzt bei der Whisper-Installation automatisch mit installiert. DLL-Verzeichnisse werden zur Laufzeit automatisch zum PATH hinzugefuegt. Falls CUDA trotzdem fehlschlaegt, wird automatisch auf CPU zurueckgefallen.
+- **LRC-Umlaute wurden nicht korrekt dargestellt** — Windows-Encoding (cp1252) verursachte `UnicodeEncodeError` bei Umlauten. LRC-Output wird jetzt ueber eine UTF-8 Temp-Datei statt stdout uebertragen.
+- **AI: Instrumental Tag war zu aggressiv** — Songs mit leisem oder ruhigem Gesang wurden faelschlicherweise als Instrumental getaggt. Schwellenwerte deutlich verschaerft (ZCR < 0.02 statt 0.05, Centroid < 2000 statt 3000), sodass nur noch wirklich gesangsfreie Tracks erkannt werden.
+- **Tabellen-Scrollen funktionierte nicht** — Durch den neuen View-Toggle-Wrapper fehlte `min-h-0` auf dem TrackGrid-Container, wodurch die Tabelle ueber den sichtbaren Bereich hinauswuchs statt zu scrollen. Gleiches Problem im Media Browser behoben.
+
+---
+
 ## v1.7.0
 
 ### Neue Features

@@ -256,7 +256,7 @@ export default function MediaBrowser({ tracks }: MediaBrowserProps) {
   // --- Artist Grid ---
   if (view === 'artists') {
     return (
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
         {ArtworkInput}
         <TabBar />
         <div className="flex-1 overflow-auto p-4">
@@ -304,7 +304,7 @@ export default function MediaBrowser({ tracks }: MediaBrowserProps) {
   // --- Album Grid ---
   if (view === 'albums') {
     return (
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
         {ArtworkInput}
         <TabBar />
         <div className="flex-1 overflow-auto p-4">
@@ -354,7 +354,7 @@ export default function MediaBrowser({ tracks }: MediaBrowserProps) {
   if (view === 'artistDetail') {
     const allArtistTracks = tracks.filter(t => (t.artist || unknownArtist) === selectedArtist)
     return (
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
         {ArtworkInput}
         <TabBar />
         <div className="flex-1 overflow-auto p-4">
@@ -423,7 +423,7 @@ export default function MediaBrowser({ tracks }: MediaBrowserProps) {
     const albumArtwork = albumTracks.find(t => t.artworkUrl)?.artworkUrl
     const albumTrackIds = albumTracks.map(t => t.id!)
     return (
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
         {ArtworkInput}
         <TabBar />
         <div className="flex-1 overflow-auto p-4">

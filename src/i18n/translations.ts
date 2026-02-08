@@ -509,6 +509,21 @@ const de = {
   'mediaBrowser.listView': 'Listenansicht',
   'mediaBrowser.gridView': 'Grid-Ansicht',
   'mediaBrowser.changeCover': 'Cover aendern',
+
+  // LRC Generation (Whisper)
+  'context.generateLrc': 'LRC generieren',
+  'lrc.title': 'LRC generieren',
+  'lrc.trackToTranscribe': 'Track transkribieren',
+  'lrc.needsInstall': 'faster-whisper nicht installiert',
+  'lrc.installDesc': 'faster-whisper wird benoetigt um Lyrics mit Zeitstempeln zu generieren. Dies benoetigt ca. 500MB Speicherplatz.',
+  'lrc.installWhisper': 'Whisper installieren',
+  'lrc.installing': 'faster-whisper wird installiert...',
+  'lrc.generating': 'Lyrics werden transkribiert...',
+  'lrc.complete': 'LRC-Generierung abgeschlossen!',
+  'lrc.error': 'Fehler bei der LRC-Generierung',
+  'lrc.start': 'LRC generieren',
+  'lrc.tryAgain': 'Erneut versuchen',
+  'lrc.saved': 'LRC gespeichert!',
 }
 
 const en: typeof de = {
@@ -1020,6 +1035,21 @@ const en: typeof de = {
   'mediaBrowser.listView': 'List view',
   'mediaBrowser.gridView': 'Grid view',
   'mediaBrowser.changeCover': 'Change cover',
+
+  // LRC Generation (Whisper)
+  'context.generateLrc': 'Generate LRC',
+  'lrc.title': 'Generate LRC',
+  'lrc.trackToTranscribe': 'Track to transcribe',
+  'lrc.needsInstall': 'faster-whisper not installed',
+  'lrc.installDesc': 'faster-whisper is required to generate timestamped lyrics. This requires about 500MB of disk space.',
+  'lrc.installWhisper': 'Install Whisper',
+  'lrc.installing': 'Installing faster-whisper...',
+  'lrc.generating': 'Transcribing lyrics...',
+  'lrc.complete': 'LRC generation complete!',
+  'lrc.error': 'LRC generation failed',
+  'lrc.start': 'Generate LRC',
+  'lrc.tryAgain': 'Try again',
+  'lrc.saved': 'LRC saved!',
 }
 
 export const translations: Record<string, typeof de> = {

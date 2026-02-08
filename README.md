@@ -40,6 +40,7 @@ Desktop-Anwendung zur Verwaltung von Musik- und Effekt-Bibliotheken, optimiert f
 - Kompressor (Threshold, Ratio, Attack, Release, Knee)
 - Audio-Visualizer (FFT-Spektrum)
 - Lyrics-Anzeige (lyrics.ovh, Genius, LRCLIB) mit LRC Sync-Modus
+- KI-basierte LRC-Generierung via faster-whisper (lokale Lyrics-Transkription mit Zeitstempeln, GPU-beschleunigt)
 
 ### Wiedergabe-Modi
 
@@ -222,8 +223,9 @@ Alle Tastenkuerzel koennen in den Einstellungen angepasst werden.
 - **Build:** Vite 6 + electron-builder
 - **Audio:** Web Audio API (BPM, Tonart, EQ, Reverb, Kompressor, Waveform)
 - **Download:** yt-dlp + ffmpeg (automatisch installiert)
-- **Lyrics:** lyrics.ovh, LRCLIB, Genius (Scraping)
+- **Lyrics:** lyrics.ovh, LRCLIB, Genius (Scraping), faster-whisper (LRC-Generierung)
 - **Stem Separation:** Demucs (Python, optional GPU/CUDA)
+- **LRC-Generierung:** faster-whisper (CTranslate2, optional GPU/CUDA)
 - **Streaming:** Eingebauter HTTP + SSE-Server (Node built-ins, Server-Sent Events)
 
 ## Daten & Cache
@@ -239,6 +241,21 @@ Alle Tastenkuerzel koennen in den Einstellungen angepasst werden.
 **App zuruecksetzen:** IndexedDB loeschen (DevTools > Application > IndexedDB) und den `%APPDATA%/Lorus Musik Macher/` Ordner entfernen.
 
 ## Changelog
+
+### v1.7.1
+- KI-basierte LRC-Generierung (Whisper `large-v3`) — lokale Lyrics-Transkription mit Zeitstempeln, 99+ Sprachen, mehrsprachige Songs
+- Hardware-Beschleunigung (GPU-Rasterization, Vulkan, Zero-Copy)
+- Spotify URLs mit `/intl-XX/` werden korrekt erkannt
+- CUDA-DLL Auto-Install und Runtime-PATH fuer Whisper
+- UTF-8 LRC-Output (Umlaute korrekt)
+- Strengere Instrumental-Erkennung (ZCR < 0.02, Centroid < 2000)
+- Tabellen-Scrollen behoben
+
+### v1.7.0
+- KI-Stimmungserkennung (8 Stimmungen)
+- Media Browser (Kuenstler- und Album-Karten)
+- Cover-Art bearbeiten
+- Spotify Album- und Kuenstler-Download
 
 ### v1.6.0
 - Playlist-Download (YouTube, Spotify, SoundCloud Playlists) mit Live-Import

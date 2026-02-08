@@ -10,6 +10,7 @@ import { getAudioBlob, getFavoriteTracks, updateTrack as dbUpdateTrack } from '.
 import TagAssignmentPopover from './TagAssignmentPopover'
 import TrackContextMenu from './TrackContextMenu'
 import StemSeparationModal from './StemSeparationModal'
+import LrcGenerationModal from './LrcGenerationModal'
 import CompatibleTracksModal from './CompatibleTracksModal'
 import SimilarTracksModal from './SimilarTracksModal'
 import type { Track } from '../types'
@@ -88,6 +89,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
   const [showColumnSettings, setShowColumnSettings] = useState(false)
   const [identifyingTrackId, setIdentifyingTrackId] = useState<number | null>(null)
   const [stemSeparationTrack, setStemSeparationTrack] = useState<Track | null>(null)
+  const [lrcGenerationTrack, setLrcGenerationTrack] = useState<Track | null>(null)
   const [compatibleTrack, setCompatibleTrack] = useState<Track | null>(null)
   const [similarTrack, setSimilarTrack] = useState<Track | null>(null)
   const [analyzeProgress, setAnalyzeProgress] = useState<{
@@ -516,7 +518,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
 
   return (
     <div
-      className="flex-1 flex flex-col min-w-0 relative"
+      className="flex-1 flex flex-col min-w-0 min-h-0 relative"
       onDragEnter={handleFileDragEnter}
       onDragLeave={handleFileDragLeave}
       onDragOver={handleFileDragOver}
@@ -560,6 +562,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
           onToggleFavorite={(track) => toggleFavorite(track.id!)}
           onIdentifyTrack={settings.acoustidApiKey ? handleIdentifyTrack : undefined}
           onSeparateStems={(track) => setStemSeparationTrack(track)}
+          onGenerateLrc={(track) => setLrcGenerationTrack(track)}
           onFindCompatible={(track) => setCompatibleTrack(track)}
           onFindSimilar={(track) => setSimilarTrack(track)}
           tags={tags}
@@ -579,6 +582,13 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
         onClose={() => setStemSeparationTrack(null)}
         track={stemSeparationTrack}
         category={category}
+      />
+
+      {/* LRC Generation Modal */}
+      <LrcGenerationModal
+        isOpen={lrcGenerationTrack !== null}
+        onClose={() => setLrcGenerationTrack(null)}
+        track={lrcGenerationTrack}
       />
 
       {/* Compatible Tracks Modal */}

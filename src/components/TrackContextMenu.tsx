@@ -19,6 +19,7 @@ interface TrackContextMenuProps {
   onToggleFavorite?: (track: Track) => void
   onIdentifyTrack?: (track: Track) => void
   onSeparateStems?: (track: Track) => void
+  onGenerateLrc?: (track: Track) => void
   onFindCompatible?: (track: Track) => void
   onFindSimilar?: (track: Track) => void
   tags?: Tag[]
@@ -44,6 +45,7 @@ export default function TrackContextMenu({
   onToggleFavorite,
   onIdentifyTrack,
   onSeparateStems,
+  onGenerateLrc,
   onFindCompatible,
   onFindSimilar,
   tags,
@@ -203,6 +205,15 @@ export default function TrackContextMenu({
         onClose()
       },
       hidden: !onSeparateStems || !isElectron,
+    },
+    {
+      label: t('context.generateLrc'),
+      icon: 'M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z',
+      onClick: () => {
+        onGenerateLrc?.(track)
+        onClose()
+      },
+      hidden: !onGenerateLrc || !isElectron,
     },
     {
       label: t('context.findCompatible'),
