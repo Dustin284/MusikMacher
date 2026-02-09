@@ -219,6 +219,20 @@ export interface AppSettings {
 
   // Spotify-style media browser
   spotifyViewEnabled?: boolean
+
+  // Twitch Chatbot
+  twitchEnabled?: boolean
+  twitchChannel?: string
+  twitchOAuthToken?: string
+  twitchBotUsername?: string
+  twitchVoteskipThreshold?: number
+  twitchSongRequestEnabled?: boolean
+  twitchModSkipEnabled?: boolean
+  twitchSrCategory?: number
+
+  // UI Layout
+  compactPlayer?: boolean
+  sidebarCollapsed?: boolean
 }
 
 export const DEFAULT_SHORTCUTS: KeyboardShortcut[] = [

@@ -242,6 +242,16 @@ Alle Tastenkuerzel koennen in den Einstellungen angepasst werden.
 
 ## Changelog
 
+### v1.8.0
+- macOS Sonoma/Sequoia UI-Redesign (26+ Komponenten, neues Design-System)
+- Einklappbare Sidebar (Icons-only Mode)
+- Kompakter Mini-Player (Apple Music-Stil)
+- Twitch Chatbot-Integration (!sr, !song, !skip, !voteskip)
+- 2-Stem Separation (Vocal/Instrumental) neben 4-Stem und 6-Stem
+- Vollbreite-Layouts fuer Settings, Import und Statistiken
+- Modernisierte Modals, Player, TrackGrid und alle Panels
+- Neue CSS Utilities (sonoma-surface, shadow-sonoma, separator-sonoma)
+
 ### v1.7.1
 - KI-basierte LRC-Generierung (Whisper `large-v3`) — lokale Lyrics-Transkription mit Zeitstempeln, 99+ Sprachen, mehrsprachige Songs
 - Hardware-Beschleunigung (GPU-Rasterization, Vulkan, Zero-Copy)

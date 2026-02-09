@@ -331,7 +331,7 @@ export default function DownloadPanel({ category, initialUrl, onInitialUrlConsum
   // Non-Electron fallback
   if (!isElectron) {
     return (
-      <div className="p-4 rounded-xl bg-surface-100/50 dark:bg-surface-800/50 border border-surface-200/60 dark:border-surface-700/60">
+      <div className="p-4 rounded-2xl bg-surface-100/50 dark:bg-surface-800/50 border-0 shadow-sm">
         <div className="flex items-center gap-3 text-surface-500">
           <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
@@ -343,7 +343,7 @@ export default function DownloadPanel({ category, initialUrl, onInitialUrlConsum
   }
 
   return (
-    <div className="p-4 rounded-xl bg-surface-100/50 dark:bg-surface-800/50 border border-surface-200/60 dark:border-surface-700/60">
+    <div className="p-4 rounded-2xl bg-surface-100/50 dark:bg-surface-800/50 border-0 shadow-sonoma">
       {/* Smart input with platform icon */}
       <div className="flex items-center gap-2 mb-3">
         <div className="relative flex-1">
@@ -373,7 +373,7 @@ export default function DownloadPanel({ category, initialUrl, onInitialUrlConsum
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isDownloading}
-            className="w-full pl-9 pr-3 py-2 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all disabled:opacity-50"
+            className="w-full pl-9 pr-3 py-3 text-[13px] rounded-xl border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all disabled:opacity-50"
           />
         </div>
 
@@ -382,7 +382,7 @@ export default function DownloadPanel({ category, initialUrl, onInitialUrlConsum
           <button
             onClick={() => handleDownload()}
             disabled={!input.trim() || !platform || isDownloading}
-            className="px-4 py-2 text-[13px] font-medium rounded-lg bg-primary-500 hover:bg-primary-600 text-white shadow-sm shadow-primary-500/20 transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+            className="px-5 py-2.5 text-[13px] font-medium rounded-xl bg-primary-500 hover:bg-primary-600 text-white shadow-sm transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
           >
             {isDownloading ? t('download.downloading') : t('download.download')}
           </button>
@@ -401,7 +401,7 @@ export default function DownloadPanel({ category, initialUrl, onInitialUrlConsum
               {t('playlist.fetchingInfo')}
             </div>
           ) : playlistInfo ? (
-            <div className="flex items-center justify-between p-3 rounded-lg bg-primary-500/10 border border-primary-500/20">
+            <div className="flex items-center justify-between p-3 rounded-lg bg-primary-500/10 border border-primary-500/10">
               <div className="flex items-center gap-2 min-w-0">
                 <svg className="w-5 h-5 text-primary-500 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" />
@@ -419,7 +419,7 @@ export default function DownloadPanel({ category, initialUrl, onInitialUrlConsum
               </div>
               <button
                 onClick={handlePlaylistDownload}
-                className="px-4 py-2 text-[13px] font-medium rounded-lg bg-primary-500 hover:bg-primary-600 text-white shadow-sm shadow-primary-500/20 transition-all active:scale-[0.98] shrink-0 ml-3"
+                className="px-5 py-2.5 text-[13px] font-medium rounded-xl bg-primary-500 hover:bg-primary-600 text-white shadow-sm transition-all active:scale-[0.98] shrink-0 ml-3"
               >
                 {t('playlist.downloadAll')}
               </button>

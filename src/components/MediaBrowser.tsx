@@ -198,7 +198,7 @@ export default function MediaBrowser({ tracks }: MediaBrowserProps) {
 
   // --- Tab bar ---
   const TabBar = () => (
-    <div className="flex items-center gap-1 px-4 py-2 border-b border-surface-200/60 dark:border-surface-800/60">
+    <div className="flex items-center gap-1 px-4 py-2 border-b separator-sonoma">
       {(view === 'artistDetail' || view === 'albumDetail') && (
         <button
           onClick={goBack}
@@ -264,10 +264,10 @@ export default function MediaBrowser({ tracks }: MediaBrowserProps) {
             {artists.map(artist => (
               <div
                 key={artist.name}
-                className="group flex flex-col items-center gap-2.5 p-3 rounded-xl hover:bg-surface-100/80 dark:hover:bg-surface-800/60 transition-all cursor-pointer"
+                className="group flex flex-col items-center gap-2.5 p-4 rounded-2xl hover:bg-surface-100/80 dark:hover:bg-surface-800/60 transition-all cursor-pointer"
                 onClick={() => navigateToArtist(artist.name)}
               >
-                <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-md group-hover:shadow-lg transition-shadow group/cover">
+                <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-sonoma group-hover:shadow-lg transition-shadow group/cover">
                   {artist.artwork ? (
                     <img src={artist.artwork} alt="" className="w-full h-full object-cover" />
                   ) : (
@@ -312,10 +312,10 @@ export default function MediaBrowser({ tracks }: MediaBrowserProps) {
             {albums.map(album => (
               <div
                 key={`${album.artist}|||${album.name}`}
-                className="group flex flex-col items-center gap-2.5 p-3 rounded-xl hover:bg-surface-100/80 dark:hover:bg-surface-800/60 transition-all cursor-pointer"
+                className="group flex flex-col items-center gap-2.5 p-4 rounded-2xl hover:bg-surface-100/80 dark:hover:bg-surface-800/60 transition-all cursor-pointer"
                 onClick={() => navigateToAlbum(album.name, album.artist)}
               >
-                <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-md group-hover:shadow-lg transition-shadow">
+                <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-sonoma group-hover:shadow-lg transition-shadow">
                   {album.artwork ? (
                     <img src={album.artwork} alt="" className="w-full h-full object-cover" />
                   ) : (
@@ -365,10 +365,10 @@ export default function MediaBrowser({ tracks }: MediaBrowserProps) {
               {artistAlbums.map(album => (
                 <div
                   key={album.name}
-                  className="group flex flex-col items-center gap-2 p-2.5 rounded-xl hover:bg-surface-100/80 dark:hover:bg-surface-800/60 transition-all cursor-pointer"
+                  className="group flex flex-col items-center gap-2 p-3 rounded-2xl hover:bg-surface-100/80 dark:hover:bg-surface-800/60 transition-all cursor-pointer"
                   onClick={() => navigateToAlbum(album.name, selectedArtist)}
                 >
-                  <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-sm group-hover:shadow-md transition-shadow">
+                  <div className="relative w-full aspect-square rounded-lg overflow-hidden shadow-sonoma group-hover:shadow-lg transition-shadow">
                     {album.artwork ? (
                       <img src={album.artwork} alt="" className="w-full h-full object-cover" />
                     ) : (
@@ -435,7 +435,7 @@ export default function MediaBrowser({ tracks }: MediaBrowserProps) {
               title={t('mediaBrowser.changeCover')}
             >
               {albumArtwork ? (
-                <img src={albumArtwork} alt="" className="w-48 h-48 rounded-xl object-cover shadow-lg" />
+                <img src={albumArtwork} alt="" className="w-48 h-48 rounded-xl object-cover shadow-sonoma" />
               ) : (
                 <MusicFallback size="lg" />
               )}
@@ -452,7 +452,7 @@ export default function MediaBrowser({ tracks }: MediaBrowserProps) {
               </p>
               <button
                 onClick={() => handlePlayAll(albumTracks)}
-                className="mt-2 self-start px-4 py-1.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-[13px] font-medium transition-colors shadow-sm shadow-primary-500/20"
+                className="mt-2 self-start px-4 py-1.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-[13px] font-medium transition-colors shadow-sm"
               >
                 {t('mediaBrowser.playAll')}
               </button>
@@ -507,8 +507,8 @@ function TrackList({ tracks, currentTrackId, isPlaying, onPlay, onChangeArtwork,
             key={track.id}
             className={`group/row flex items-center gap-3 px-3 py-2 rounded-lg transition-all cursor-pointer ${
               isCurrent
-                ? 'bg-primary-500/10 dark:bg-primary-500/[0.08]'
-                : 'hover:bg-surface-100/80 dark:hover:bg-surface-800/40'
+                ? 'bg-primary-500/6 dark:bg-primary-500/[0.05]'
+                : 'hover:bg-surface-100/60 dark:hover:bg-surface-800/30'
             }`}
             onClick={() => onPlay(track)}
           >

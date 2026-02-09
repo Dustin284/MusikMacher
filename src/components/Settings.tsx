@@ -6,6 +6,8 @@ import type { TranslationKey } from '../i18n/translations'
 import { DEFAULT_SHORTCUTS, DEFAULT_VISIBLE_COLUMNS } from '../types'
 import type { KeyboardShortcut, AppSettings } from '../types'
 import LogViewer from './LogViewer'
+import { useTwitchStore } from '../store/useTwitchStore'
+import { useLibraryStore } from '../store/useLibraryStore'
 
 // Shortcut action display names
 const SHORTCUT_ACTIONS: { action: string; labelKey: string }[] = [
@@ -79,8 +81,8 @@ export default function Settings() {
   ]
 
   return (
-    <div className="p-6 max-w-xl mx-auto overflow-y-auto h-full">
-      <div className="flex flex-col gap-5">
+    <div className="p-8 overflow-y-auto h-full">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
 
         {/* Theme */}
         <Section title={t('settings.design')} icon="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01">
@@ -93,7 +95,7 @@ export default function Settings() {
                 className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all duration-200 ${
                   settings.theme === th.value
                     ? 'border-primary-500 bg-primary-500/10 shadow-sm shadow-primary-500/10'
-                    : 'border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600'
+                    : 'border-surface-200/30 dark:border-surface-700/30 hover:border-surface-300/30 dark:hover:border-surface-600/30'
                 }`}
               >
                 <svg className={`w-5 h-5 ${settings.theme === th.value ? 'text-primary-500' : 'text-surface-400'}`} fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
@@ -129,15 +131,6 @@ export default function Settings() {
           </div>
         </Section>
 
-        {/* Tags */}
-        <Section title={t('settings.tags')} icon="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z">
-          <SelectField
-            value={settings.andTagCombination}
-            options={tagModes}
-            onChange={(v) => update({ andTagCombination: v })}
-          />
-        </Section>
-
         {/* Appearance */}
         <Section title={t('settings.appearance')} icon="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z">
           <label className="text-[13px] text-surface-500 mb-1.5 block">{t('settings.windowTitle')}</label>
@@ -145,17 +138,29 @@ export default function Settings() {
             type="text"
             value={settings.windowTitle}
             onChange={(e) => update({ windowTitle: e.target.value })}
-            className="w-full px-3 py-2 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all"
+            className="w-full px-3 py-2 text-[13px] rounded-xl border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all"
           />
+          <div className="mt-4">
+            <Toggle label={t('settings.compactPlayer')} checked={settings.compactPlayer ?? false} onChange={(v) => update({ compactPlayer: v })} />
+          </div>
         </Section>
 
-        {/* Language */}
+        {/* Language + Tags */}
         <Section title={t('settings.language')} icon="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129">
-          <SelectField
-            value={settings.language}
-            options={languages}
-            onChange={(v) => update({ language: v })}
-          />
+          <div className="flex flex-col gap-4">
+            <SelectField
+              value={settings.language}
+              options={languages}
+              onChange={(v) => update({ language: v })}
+            />
+            <hr className="border-surface-200/30 dark:border-surface-700/30" />
+            <label className="text-[13px] font-medium text-surface-600 dark:text-surface-400">{t('settings.tags')}</label>
+            <SelectField
+              value={settings.andTagCombination}
+              options={tagModes}
+              onChange={(v) => update({ andTagCombination: v })}
+            />
+          </div>
         </Section>
 
         {/* Options */}
@@ -176,7 +181,7 @@ export default function Settings() {
                 value={settings.acoustidApiKey || ''}
                 onChange={(e) => update({ acoustidApiKey: e.target.value })}
                 placeholder="AcoustID API Key"
-                className="w-full px-3 py-2 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all font-mono"
+                className="w-full px-3 py-2 text-[13px] rounded-lg border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all font-mono"
               />
             </div>
           </div>
@@ -221,7 +226,7 @@ export default function Settings() {
                   setTimeout(() => setUpdateStatus('idle'), 5000)
                 }}
                 disabled={updateStatus === 'checking'}
-                className="px-3 py-1.5 text-[13px] font-medium rounded-lg bg-primary-500 hover:bg-primary-600 text-white disabled:opacity-40 transition-colors"
+                className="px-5 py-2.5 text-[13px] font-medium rounded-xl bg-primary-500 hover:bg-primary-600 text-white disabled:opacity-40 transition-colors shadow-sm"
               >
                 {updateStatus === 'checking' ? '...' : t('settings.checkUpdate')}
               </button>
@@ -250,7 +255,8 @@ export default function Settings() {
           </div>
         </Section>
 
-        {/* Streaming / OBS */}
+        {/* Streaming / OBS - full width */}
+        <div className="lg:col-span-2">
         <Section title={t('obs.title')} icon="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z">
           <div className="flex flex-col gap-4">
             <Toggle label={t('obs.enable')} checked={settings.obsEnabled ?? false} onChange={async (v) => {
@@ -295,7 +301,7 @@ export default function Settings() {
                 type="number"
                 value={settings.obsPort ?? 7878}
                 onChange={(e) => update({ obsPort: parseInt(e.target.value) || 7878 })}
-                className="w-24 px-3 py-2 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all font-mono"
+                className="w-24 px-3 py-2 text-[13px] rounded-lg border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all font-mono"
               />
             </div>
 
@@ -345,7 +351,7 @@ export default function Settings() {
                     update({ obsOverlayWidth: v })
                     window.electronAPI?.obsUpdateSettings?.({ obsOverlayWidth: v })
                   }}
-                  className="w-full px-3 py-2 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all font-mono"
+                  className="w-full px-3 py-2 text-[13px] rounded-lg border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all font-mono"
                 />
               </div>
               <div>
@@ -358,14 +364,14 @@ export default function Settings() {
                     update({ obsOverlayHeight: v })
                     window.electronAPI?.obsUpdateSettings?.({ obsOverlayHeight: v })
                   }}
-                  className="w-full px-3 py-2 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all font-mono"
+                  className="w-full px-3 py-2 text-[13px] rounded-lg border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all font-mono"
                 />
               </div>
             </div>
 
             <button
               onClick={() => window.electronAPI?.openExternal?.(`http://localhost:${settings.obsPort ?? 7878}/overlay`)}
-              className="px-3 py-1.5 text-[13px] font-medium rounded-lg bg-primary-500 hover:bg-primary-600 text-white transition-colors self-start"
+              className="px-5 py-2.5 text-[13px] font-medium rounded-xl bg-primary-500 hover:bg-primary-600 text-white transition-colors self-start shadow-sm"
             >
               {t('obs.preview')}
             </button>
@@ -382,7 +388,7 @@ export default function Settings() {
             </button>
 
             {showTutorial && (
-              <div className="bg-surface-100/80 dark:bg-surface-900/60 rounded-lg p-4 text-[13px] text-surface-600 dark:text-surface-400 flex flex-col gap-2.5 border border-surface-200/60 dark:border-surface-700/40">
+              <div className="bg-surface-100/80 dark:bg-surface-900/60 rounded-lg p-4 text-[13px] text-surface-600 dark:text-surface-400 flex flex-col gap-2.5 border border-surface-200/30 dark:border-surface-700/30">
                 <h4 className="text-[12px] font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider">{t('obs.tutorial')}</h4>
                 <p>{t('obs.tutorialStep1')}</p>
                 <p>{t('obs.tutorialStep2', { port: String(settings.obsPort ?? 7878) })}</p>
@@ -411,7 +417,7 @@ export default function Settings() {
             )}
 
             {/* Divider */}
-            <hr className="border-surface-200/60 dark:border-surface-700/60" />
+            <hr className="border-surface-200/30 dark:border-surface-700/30" />
 
             {/* Text file export */}
             <h4 className="text-[12px] font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider">{t('obs.textFile')}</h4>
@@ -428,7 +434,7 @@ export default function Settings() {
                     value={settings.obsTextFilePath || ''}
                     readOnly
                     placeholder={t('obs.textFilePath')}
-                    className="flex-1 px-3 py-2 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 text-surface-500 font-mono truncate"
+                    className="flex-1 px-3 py-2 text-[13px] rounded-lg border-0 bg-surface-200/50 dark:bg-surface-800/50 text-surface-500 font-mono truncate"
                   />
                   <button
                     onClick={async () => {
@@ -438,7 +444,7 @@ export default function Settings() {
                         window.electronAPI?.obsUpdateSettings?.({ obsTextFilePath: filePath })
                       }
                     }}
-                    className="px-3 py-2 text-[12px] font-medium rounded-lg border border-primary-500 text-primary-500 hover:bg-primary-500/10 transition-colors whitespace-nowrap"
+                    className="px-3 py-2 text-[12px] font-medium rounded-xl border border-primary-500 text-primary-500 hover:bg-primary-500/10 transition-colors whitespace-nowrap"
                   >
                     {t('obs.textFileSelect')}
                   </button>
@@ -453,7 +459,7 @@ export default function Settings() {
                       update({ obsTextFormat: e.target.value })
                       window.electronAPI?.obsUpdateSettings?.({ obsTextFormat: e.target.value })
                     }}
-                    className="w-full px-3 py-2 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all font-mono"
+                    className="w-full px-3 py-2 text-[13px] rounded-lg border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all font-mono"
                   />
                   <p className="text-[11px] text-surface-400 mt-1">{t('obs.textFormatHint')}</p>
                 </div>
@@ -461,6 +467,16 @@ export default function Settings() {
             )}
           </div>
         </Section>
+
+        </div>
+
+        {/* Twitch Chatbot - full width */}
+        <div className="lg:col-span-2">
+        <Section title={t('twitch.title')} icon="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z">
+          <TwitchSection settings={settings} update={update} t={t} />
+        </Section>
+
+        </div>
 
         {/* Export / Import */}
         <Section title={t('settings.exportImport')} icon="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4">
@@ -482,7 +498,7 @@ export default function Settings() {
                   setExportImportStatus('exported')
                   setTimeout(() => setExportImportStatus('idle'), 3000)
                 }}
-                className="px-3 py-1.5 text-[13px] font-medium rounded-lg bg-primary-500 hover:bg-primary-600 text-white transition-colors"
+                className="px-5 py-2.5 text-[13px] font-medium rounded-xl bg-primary-500 hover:bg-primary-600 text-white transition-colors shadow-sm"
               >
                 {t('settings.exportBtn')}
               </button>
@@ -516,7 +532,7 @@ export default function Settings() {
                   }
                   input.click()
                 }}
-                className="px-3 py-1.5 text-[13px] font-medium rounded-lg border border-primary-500 text-primary-500 hover:bg-primary-500/10 transition-colors"
+                className="px-5 py-2.5 text-[13px] font-medium rounded-xl border border-primary-500 text-primary-500 hover:bg-primary-500/10 transition-colors"
               >
                 {t('settings.importBtn')}
               </button>
@@ -533,7 +549,8 @@ export default function Settings() {
           </div>
         </Section>
 
-        {/* Logs */}
+        {/* Logs - full width */}
+        <div className="lg:col-span-2">
         <Section title={t('settings.logs')} icon="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
           <button
             onClick={() => setShowLogs(!showLogs)}
@@ -547,13 +564,138 @@ export default function Settings() {
             </div>
           )}
         </Section>
+        </div>
 
-        {/* Version */}
-        <div className="text-center py-4">
+        {/* Version - full width */}
+        <div className="lg:col-span-2 text-center py-4">
           <p className="text-[13px] text-surface-500 font-medium">{t('settings.version')}</p>
           <p className="text-[11px] text-surface-400 mt-0.5">{t('settings.techStack')}</p>
         </div>
       </div>
+    </div>
+  )
+}
+
+function TwitchSection({ settings, update, t }: { settings: import('../types').AppSettings; update: (s: Partial<import('../types').AppSettings>) => void; t: (key: import('../i18n/translations').TranslationKey, params?: Record<string, string>) => string }) {
+  const twitchConnected = useTwitchStore(s => s.connected)
+  const twitchChannel = useTwitchStore(s => s.channel)
+  const libraries = useLibraryStore(s => s.libraries)
+  const [twitchError, setTwitchError] = useState<string | null>(null)
+
+  const handleToggle = async (enabled: boolean) => {
+    update({ twitchEnabled: enabled })
+    if (enabled && settings.twitchChannel) {
+      try {
+        const result = await window.electronAPI?.twitchConnect?.({
+          channel: settings.twitchChannel,
+          oauthToken: settings.twitchOAuthToken,
+          botUsername: settings.twitchBotUsername,
+          voteskipThreshold: settings.twitchVoteskipThreshold ?? 3,
+          songRequestEnabled: settings.twitchSongRequestEnabled ?? true,
+          modSkipEnabled: settings.twitchModSkipEnabled ?? true,
+        })
+        if (result && !result.success) setTwitchError(result.error || 'Unknown error')
+        else setTwitchError(null)
+      } catch (e: any) { setTwitchError(e.message) }
+    } else if (!enabled) {
+      window.electronAPI?.twitchDisconnect?.()
+      setTwitchError(null)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Toggle label={t('twitch.enable')} checked={settings.twitchEnabled ?? false} onChange={handleToggle} />
+
+      {twitchConnected && (
+        <span className="text-[12px] text-green-500 font-medium">
+          {t('twitch.connected', { channel: twitchChannel })}
+        </span>
+      )}
+      {settings.twitchEnabled && !twitchConnected && !twitchError && (
+        <span className="text-[12px] text-surface-400 font-medium">
+          {t('twitch.disconnected')}
+        </span>
+      )}
+      {twitchError && (
+        <span className="text-[12px] text-red-500 font-medium">{twitchError}</span>
+      )}
+
+      {settings.twitchEnabled && (
+        <>
+          <div>
+            <label className="text-[13px] text-surface-600 dark:text-surface-400 mb-1.5 block">{t('twitch.channel')}</label>
+            <input
+              type="text"
+              value={settings.twitchChannel || ''}
+              onChange={(e) => update({ twitchChannel: e.target.value.toLowerCase().replace(/\s/g, '') })}
+              placeholder={t('twitch.channelPlaceholder')}
+              className="w-full px-3 py-2 text-[13px] rounded-lg border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all"
+            />
+          </div>
+
+          <div>
+            <label className="text-[13px] text-surface-600 dark:text-surface-400 mb-1.5 block">{t('twitch.botUsername')}</label>
+            <input
+              type="text"
+              value={settings.twitchBotUsername || ''}
+              onChange={(e) => update({ twitchBotUsername: e.target.value })}
+              placeholder={t('twitch.botUsernamePlaceholder')}
+              className="w-full px-3 py-2 text-[13px] rounded-lg border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all"
+            />
+          </div>
+
+          <div>
+            <label className="text-[13px] text-surface-600 dark:text-surface-400 mb-1.5 block">{t('twitch.oauthToken')}</label>
+            <input
+              type="password"
+              value={settings.twitchOAuthToken || ''}
+              onChange={(e) => update({ twitchOAuthToken: e.target.value })}
+              placeholder="oauth:..."
+              className="w-full px-3 py-2 text-[13px] rounded-lg border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all font-mono"
+            />
+            <p className="text-[11px] text-surface-400 mt-1">{t('twitch.oauthHint')}</p>
+          </div>
+
+          <div>
+            <label className="text-[13px] text-surface-600 dark:text-surface-400 mb-1.5 block">{t('twitch.voteskipThreshold')}</label>
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={settings.twitchVoteskipThreshold ?? 3}
+              onChange={(e) => update({ twitchVoteskipThreshold: Math.max(1, Math.min(20, parseInt(e.target.value) || 3)) })}
+              className="w-24 px-3 py-2 text-[13px] rounded-lg border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all font-mono"
+            />
+          </div>
+
+          <Toggle label={t('twitch.allowSr')} checked={settings.twitchSongRequestEnabled ?? true} onChange={(v) => update({ twitchSongRequestEnabled: v })} />
+
+          <div>
+            <label className="text-[13px] text-surface-600 dark:text-surface-400 mb-1.5 block">{t('twitch.srCategory')}</label>
+            <select
+              value={settings.twitchSrCategory ?? 1}
+              onChange={(e) => update({ twitchSrCategory: parseInt(e.target.value) })}
+              className="w-full px-3 py-2 text-[13px] rounded-lg border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all"
+            >
+              {libraries.map(lib => (
+                <option key={lib.id} value={lib.id}>{lib.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <Toggle label={t('twitch.allowSkip')} checked={settings.twitchModSkipEnabled ?? true} onChange={(v) => update({ twitchModSkipEnabled: v })} />
+
+          {/* Commands info box */}
+          <div className="bg-surface-100/80 dark:bg-surface-900/60 rounded-lg p-4 text-[13px] text-surface-600 dark:text-surface-400 flex flex-col gap-2 border border-surface-200/30 dark:border-surface-700/30">
+            <h4 className="text-[12px] font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider">{t('twitch.commands')}</h4>
+            <p><code className="px-1.5 py-0.5 rounded bg-surface-200/30 dark:bg-surface-700/30 text-[12px] font-mono">!sr &lt;URL&gt;</code> — {t('twitch.cmdSr')}</p>
+            <p><code className="px-1.5 py-0.5 rounded bg-surface-200/30 dark:bg-surface-700/30 text-[12px] font-mono">!song</code> — {t('twitch.cmdSong')}</p>
+            <p><code className="px-1.5 py-0.5 rounded bg-surface-200/30 dark:bg-surface-700/30 text-[12px] font-mono">!skip</code> — {t('twitch.cmdSkip')}</p>
+            <p><code className="px-1.5 py-0.5 rounded bg-surface-200/30 dark:bg-surface-700/30 text-[12px] font-mono">!voteskip</code> — {t('twitch.cmdVoteskip')}</p>
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -569,7 +711,7 @@ function Section({ title, icon, children }: { title: string; icon: string; child
           {title}
         </h3>
       </div>
-      <div className="bg-white/60 dark:bg-surface-800/40 backdrop-blur-sm rounded-xl p-4 border border-surface-200/60 dark:border-surface-800/60">
+      <div className="bg-white/60 dark:bg-surface-800/40 backdrop-blur-sm rounded-2xl p-5 border-0 shadow-sonoma">
         {children}
       </div>
     </div>
@@ -597,12 +739,12 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
       <span className="text-[13px] text-surface-600 dark:text-surface-400">{label}</span>
       <button
         onClick={() => onChange(!checked)}
-        className={`relative w-9 h-5 rounded-full transition-colors duration-200 ${
+        className={`relative w-[42px] h-[25px] rounded-full transition-colors duration-200 ${
           checked ? 'bg-primary-500' : 'bg-surface-300 dark:bg-surface-600'
         }`}
       >
-        <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-          checked ? 'translate-x-4' : 'translate-x-0'
+        <span className={`absolute top-[2px] left-[2px] w-[21px] h-[21px] rounded-full bg-white shadow-sm transition-transform duration-200 ${
+          checked ? 'translate-x-[17px]' : 'translate-x-0'
         }`} />
       </button>
     </label>
@@ -615,7 +757,7 @@ function SelectField<T>({ value, options, onChange }: {
   return (
     <Listbox value={value} onChange={onChange}>
       <div className="relative">
-        <ListboxButton className="relative w-full cursor-pointer rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 py-2 pl-3 pr-10 text-left text-[13px] focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all">
+        <ListboxButton className="relative w-full cursor-pointer rounded-xl border-0 bg-surface-200/50 dark:bg-surface-800/50 py-2 pl-3 pr-10 text-left text-[13px] focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all">
           <span>{options.find(o => o.value === value)?.label}</span>
           <span className="absolute inset-y-0 right-0 flex items-center pr-2">
             <svg className="w-4 h-4 text-surface-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -696,7 +838,7 @@ function ShortcutEditor({ shortcuts, recordingAction, setRecordingAction, onUpda
           const isRecording = recordingAction === action
 
           return (
-            <div key={action} className="flex items-center justify-between py-1.5 px-1 hover:bg-surface-100/60 dark:hover:bg-surface-800/40 rounded-lg">
+            <div key={action} className="flex items-center justify-between py-1.5 px-1 hover:bg-surface-100/30 dark:hover:bg-surface-800/30 rounded-lg">
               <span className="text-[13px] text-surface-600 dark:text-surface-400">
                 {getActionLabel(action)}
               </span>
@@ -706,7 +848,7 @@ function ShortcutEditor({ shortcuts, recordingAction, setRecordingAction, onUpda
                 className={`px-2 py-0.5 rounded-md text-[12px] font-mono min-w-[80px] text-center transition-all ${
                   isRecording
                     ? 'bg-primary-500/20 text-primary-500 ring-2 ring-primary-500/30 animate-pulse'
-                    : 'bg-surface-200/60 dark:bg-surface-700/60 text-surface-600 dark:text-surface-400 hover:bg-surface-200 dark:hover:bg-surface-700'
+                    : 'bg-surface-200/30 dark:bg-surface-700/30 text-surface-600 dark:text-surface-400 hover:bg-surface-200 dark:hover:bg-surface-700'
                 }`}
               >
                 {isRecording ? t('settings.shortcutRecord') : key || '---'}

@@ -30,9 +30,9 @@ export default function SimilarTracksModal({ isOpen, onClose, track, allTracks, 
 
   return (
     <Dialog open={isOpen} onClose={onClose} className="relative z-[9999]">
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" aria-hidden="true" />
+      <div className="fixed inset-0 bg-black/20 backdrop-blur-lg" aria-hidden="true" />
       <div className="fixed inset-0 flex items-center justify-center p-4">
-        <DialogPanel className="mx-auto w-full max-w-xl rounded-2xl bg-white dark:bg-surface-800 shadow-2xl ring-1 ring-black/10 dark:ring-white/10 p-6 max-h-[80vh] flex flex-col">
+        <DialogPanel className="mx-auto w-full max-w-xl rounded-2xl bg-white/98 dark:bg-surface-850/98 backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.12)] ring-1 ring-black/10 dark:ring-white/10 p-7 max-h-[80vh] flex flex-col">
           <DialogTitle className="text-lg font-semibold text-surface-900 dark:text-surface-100 mb-1">
             {t('similar.title')}
           </DialogTitle>
@@ -96,7 +96,7 @@ export default function SimilarTracksModal({ isOpen, onClose, track, allTracks, 
           <div className="flex justify-end mt-4">
             <button
               onClick={onClose}
-              className="px-4 py-1.5 text-[13px] font-medium rounded-lg bg-surface-200 dark:bg-surface-700 hover:bg-surface-300 dark:hover:bg-surface-600 transition-colors"
+              className="px-5 py-2.5 text-[13px] font-medium rounded-xl bg-surface-200 dark:bg-surface-700 hover:bg-surface-300 dark:hover:bg-surface-600 transition-colors"
             >
               {t('app.close')}
             </button>

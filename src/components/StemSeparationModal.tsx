@@ -12,7 +12,7 @@ interface Props {
   category: number
 }
 
-type StemModel = '4' | '6'
+type StemModel = '2' | '4' | '6'
 type ProgressPhase = 'idle' | 'checking' | 'installing' | 'separating' | 'selecting' | 'importing' | 'complete' | 'error'
 
 interface StemData {
@@ -204,12 +204,12 @@ export default function StemSeparationModal({ isOpen, onClose, track, category }
 
   return (
     <Dialog open={isOpen} onClose={handleClose} className="relative z-50">
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" aria-hidden="true" />
+      <div className="fixed inset-0 bg-black/20 backdrop-blur-lg" aria-hidden="true" />
 
       <div className="fixed inset-0 flex items-center justify-center p-4">
-        <DialogPanel className="w-full max-w-md rounded-2xl bg-white dark:bg-surface-900 shadow-2xl">
+        <DialogPanel className="w-full max-w-md rounded-2xl bg-white/98 dark:bg-surface-850/98 backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.12)]">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-surface-200 dark:border-surface-800">
+          <div className="flex items-center justify-between p-4 border-b separator-sonoma">
             <DialogTitle className="text-lg font-semibold flex items-center gap-2">
               <svg className="w-5 h-5 text-primary-500" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
@@ -289,6 +289,18 @@ export default function StemSeparationModal({ isOpen, onClose, track, category }
                 <div>
                   <label className="block text-sm font-medium mb-2">{t('stemSeparation.selectModel')}</label>
                   <RadioGroup value={model} onChange={setModel} className="space-y-2">
+                    <RadioGroup.Option value="2">
+                      {({ checked }) => (
+                        <div className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                          checked
+                            ? 'border-primary-500 bg-primary-500/10'
+                            : 'border-surface-200 dark:border-surface-700 hover:bg-surface-100 dark:hover:bg-surface-800'
+                        }`}>
+                          <div className="font-medium">{t('stemSeparation.model2')}</div>
+                          <div className="text-xs text-surface-500 mt-0.5">Vocals, Instrumental</div>
+                        </div>
+                      )}
+                    </RadioGroup.Option>
                     <RadioGroup.Option value="4">
                       {({ checked }) => (
                         <div className={`p-3 rounded-lg border cursor-pointer transition-all ${
@@ -454,18 +466,18 @@ export default function StemSeparationModal({ isOpen, onClose, track, category }
           </div>
 
           {/* Footer */}
-          <div className="flex justify-end gap-2 p-4 border-t border-surface-200 dark:border-surface-800">
+          <div className="flex justify-end gap-2 p-4 border-t separator-sonoma">
             <button
               onClick={handleClose}
               disabled={isProcessing}
-              className="px-4 py-2 text-[14px] rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors disabled:opacity-50"
+              className="px-5 py-2.5 text-[14px] rounded-xl hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors disabled:opacity-50"
             >
               {t('confirm.cancel')}
             </button>
             {hasPython && hasDemucs && phase === 'idle' && (
               <button
                 onClick={handleSeparate}
-                className="px-4 py-2 text-[14px] rounded-lg bg-primary-500 hover:bg-primary-600 text-white font-medium transition-colors"
+                className="px-5 py-2.5 text-[14px] rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-medium transition-colors"
               >
                 {t('stemSeparation.start')}
               </button>
@@ -474,7 +486,7 @@ export default function StemSeparationModal({ isOpen, onClose, track, category }
               <button
                 onClick={handleImportSelected}
                 disabled={stemSelections.filter(s => s.selected).length === 0}
-                className="px-4 py-2 text-[14px] rounded-lg bg-primary-500 hover:bg-primary-600 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-5 py-2.5 text-[14px] rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {t('stemSeparation.importSelected')} ({stemSelections.filter(s => s.selected).length})
               </button>
@@ -482,7 +494,7 @@ export default function StemSeparationModal({ isOpen, onClose, track, category }
             {phase === 'error' && (
               <button
                 onClick={() => { setPhase('idle'); setError(null); setStemSelections([]) }}
-                className="px-4 py-2 text-[14px] rounded-lg bg-primary-500 hover:bg-primary-600 text-white font-medium transition-colors"
+                className="px-5 py-2.5 text-[14px] rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-medium transition-colors"
               >
                 {t('stemSeparation.tryAgain')}
               </button>

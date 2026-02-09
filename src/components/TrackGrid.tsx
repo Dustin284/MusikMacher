@@ -15,7 +15,7 @@ import CompatibleTracksModal from './CompatibleTracksModal'
 import SimilarTracksModal from './SimilarTracksModal'
 import type { Track } from '../types'
 
-const ROW_HEIGHT = 41
+const ROW_HEIGHT = 44
 const OVERSCAN = 20
 
 type SortField = 'name' | 'length' | 'createdAt' | 'comment' | 'bpm' | 'musicalKey' | 'rating' | 'energy' | 'mood' | 'artist' | 'album' | 'year'
@@ -621,7 +621,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
             placeholder={searchPlaceholder}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-1.5 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all"
+            className="w-full pl-9 pr-3 py-2.5 text-[13px] rounded-xl border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all"
           />
           {searchTerm && (
             <button
@@ -636,7 +636,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
         </div>
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="p-1.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white transition-all duration-150 active:scale-95 shadow-sm shadow-primary-500/20 shrink-0"
+          className="p-1.5 rounded-xl bg-primary-500 hover:bg-primary-600 text-white transition-all duration-150 active:scale-95 shadow-sm shadow-primary-500/20 shrink-0"
           title={addFilesTitle}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
@@ -839,8 +839,8 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
           </div>
         ) : (
           <table className="w-full text-[13px]">
-            <thead className="sticky top-0 bg-surface-100/90 dark:bg-surface-900/90 backdrop-blur-md border-b border-surface-200/60 dark:border-surface-800/60 z-10">
-              <tr className="text-surface-500 text-[11px] font-semibold uppercase tracking-wider">
+            <thead className="sticky top-0 bg-surface-100/90 dark:bg-surface-900/90 backdrop-blur-md border-b separator-sonoma z-10">
+              <tr className="text-surface-500 text-[12px] font-medium">
                 <th className="w-9 px-1 py-2" />
                 <SortHeader field="name" className="text-left">{t('browse.name')}</SortHeader>
                 {isColVisible('artist') && <SortHeader field="artist" className="text-left w-28">{t('browse.artist')}</SortHeader>}
@@ -880,14 +880,14 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
                     onMouseDown={() => { if (!isEditing) handleTrackMouseDown(track) }}
                     onDragStart={(e) => { if (isEditing) { e.preventDefault(); return } handleDragStart(e, track) }}
                     onDragEnd={handleDragEnd}
-                    className={`group/row border-b border-surface-100/60 dark:border-surface-800/40 cursor-pointer transition-all duration-100 ${
+                    className={`group/row border-b border-surface-100/30 dark:border-surface-800/20 cursor-pointer transition-all duration-100 ${
                       isBatchSelected
                         ? 'bg-primary-500/20 dark:bg-primary-500/15'
                         : isCurrent
-                        ? 'bg-primary-500/10 dark:bg-primary-500/[0.08]'
+                        ? 'bg-primary-500/6 dark:bg-primary-500/[0.05]'
                         : isSelected
                         ? 'bg-surface-200/60 dark:bg-surface-800/60'
-                        : 'hover:bg-surface-100/80 dark:hover:bg-surface-800/40'
+                        : 'hover:bg-surface-100/60 dark:hover:bg-surface-800/30'
                     } ${track.isHidden ? 'opacity-40' : ''}`}
                   >
                     {/* Artwork */}
@@ -1158,7 +1158,7 @@ export default function TrackGrid({ category, isActive }: TrackGridProps) {
                       <td className="px-1 py-1">
                         <button
                           onClick={(e) => { e.stopPropagation(); handleExport(track) }}
-                          className="p-1 rounded-md opacity-0 group-hover/row:opacity-100 hover:bg-surface-200 dark:hover:bg-surface-700 transition-all"
+                          className="p-1.5 rounded-lg opacity-0 group-hover/row:opacity-100 hover:bg-surface-200 dark:hover:bg-surface-700 transition-all"
                           title={t('browse.export')}
                         >
                           <svg className="w-3.5 h-3.5 text-surface-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">

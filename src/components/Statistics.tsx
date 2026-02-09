@@ -125,7 +125,7 @@ function computeStats(tracks: Track[], libraries: Library[], tags: Tag[], t: (k:
 
 function StatCard({ icon, label, value }: { icon: string; label: string; value: string | number }) {
   return (
-    <div className="bg-white/60 dark:bg-surface-800/40 backdrop-blur-sm rounded-xl p-4 border border-surface-200/60 dark:border-surface-800/60">
+    <div className="bg-white/60 dark:bg-surface-800/40 backdrop-blur-sm rounded-2xl p-5 border-0 shadow-sonoma">
       <div className="flex items-center gap-2 mb-1">
         <svg className="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d={icon} />
@@ -146,7 +146,7 @@ function DashboardSection({ title, icon, children }: { title: string; icon: stri
         </svg>
         <h3 className="text-[12px] font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider">{title}</h3>
       </div>
-      <div className="bg-white/60 dark:bg-surface-800/40 backdrop-blur-sm rounded-xl p-4 border border-surface-200/60 dark:border-surface-800/60">
+      <div className="bg-white/60 dark:bg-surface-800/40 backdrop-blur-sm rounded-2xl p-5 border-0 shadow-sonoma">
         {children}
       </div>
     </div>
@@ -339,7 +339,7 @@ export default function Statistics() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto overflow-y-auto h-full">
+    <div className="p-8 overflow-y-auto h-full">
       {/* Hero stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard
@@ -365,7 +365,7 @@ export default function Statistics() {
       </div>
 
       {/* Dashboard grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-5">
         {/* Most Played */}
         <DashboardSection
           title={t('stats.mostPlayed')}

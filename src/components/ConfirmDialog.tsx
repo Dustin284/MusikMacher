@@ -23,13 +23,13 @@ export default function ConfirmDialog({
     <Dialog open={isOpen} onClose={onCancel} className="relative z-[9999]">
       <DialogBackdrop
         transition
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-200 data-[closed]:opacity-0"
+        className="fixed inset-0 bg-black/20 backdrop-blur-lg transition-opacity duration-200 data-[closed]:opacity-0"
       />
 
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <DialogPanel
           transition
-          className="w-full max-w-sm rounded-xl bg-white dark:bg-surface-800 shadow-2xl shadow-black/20 ring-1 ring-black/10 dark:ring-white/10 p-6 transition-all duration-200 data-[closed]:opacity-0 data-[closed]:scale-95"
+          className="w-full max-w-sm rounded-2xl bg-white/98 dark:bg-surface-850/98 backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.12)] p-7 transition-all duration-200 data-[closed]:opacity-0 data-[closed]:scale-95"
         >
           {/* Warning icon */}
           <div className="flex items-center gap-3 mb-4">
@@ -62,13 +62,13 @@ export default function ConfirmDialog({
           <div className="flex items-center justify-end gap-2.5">
             <button
               onClick={onCancel}
-              className="px-4 py-2 text-[13px] font-medium rounded-lg border border-surface-200 dark:border-surface-700 text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700/60 transition-colors"
+              className="px-5 py-2.5 text-[13px] font-medium rounded-xl border border-surface-200 dark:border-surface-700 text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700/60 transition-colors"
             >
               {cancelLabel}
             </button>
             <button
               onClick={onConfirm}
-              className="px-4 py-2 text-[13px] font-medium rounded-lg bg-red-500 hover:bg-red-600 text-white shadow-sm shadow-red-500/25 transition-colors active:scale-[0.98]"
+              className="px-5 py-2.5 text-[13px] font-medium rounded-xl bg-red-500 hover:bg-red-600 text-white shadow-sm shadow-red-500/25 transition-colors active:scale-[0.98]"
             >
               {confirmLabel}
             </button>

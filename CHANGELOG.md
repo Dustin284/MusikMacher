@@ -1,5 +1,38 @@
 # Changelog
 
+## v1.8.0
+
+### Neue Features
+
+- **macOS Sonoma/Sequoia UI-Redesign** — Komplett ueberarbeitetes Design im Stil von macOS Sonoma/Sequoia (Apple Music, Finder). Neues Design-Token-System mit Apple Button Blue (`#0071e3`), sanftere Farben, grosszuegigere Abstande, konsistente `rounded-xl` Buttons. 26+ Komponenten ueberarbeitet.
+- **Einklappbare Sidebar** — Sidebar kann per Toggle-Button in der Title Bar eingeklappt werden (`w-[56px]`, nur Icons mit Tooltips) oder ausgeklappt (`w-[220px]`). Smooth CSS-Transition. Einstellung wird gespeichert.
+- **Kompakter Mini-Player** — Umschaltbar in den Einstellungen. Einzelne Zeile (`h-16`) mit Cover, Titel, Play-Controls, Progress-Bar und Volume. Apple Music-Stil mit gefuelltem Play-Button.
+- **Twitch Chatbot-Integration** — Twitch-Zuschauer koennen per Chat-Befehlen mit der App interagieren (`!sr <URL>`, `!song`, `!skip`, `!voteskip`). Automatischer Download und Queue-Einfuegung bei Song Requests. Duplikat-Erkennung mit 60-Sekunden-Cooldown. Konfigurierbar in den Einstellungen.
+- **2-Stem Separation (Vocal/Instrumental)** — Neues Demucs-Modell neben 4-Stem und 6-Stem: Trennung in nur Vocals und Instrumental per `--two-stems vocals`. Schneller als 4/6-Stem und ideal fuer Karaoke oder Acapella-Extraktion.
+
+### Verbesserungen
+
+- **Vollbreite-Layouts** — Settings (2-Spalten Grid), Import (2-Spalten: Datei-Import + Download-Panel) und Statistiken (3-Spalten auf XL) nutzen jetzt die volle Fensterbreite statt max-width Container.
+- **Neue CSS Utilities** — `.sonoma-surface` (macOS-Fenster-Chrom), `.shadow-sonoma` (subtiler macOS-Schatten), `.separator-sonoma` (dezente Trennlinien) fuer konsistentes Apple-Styling.
+- **Modernisierte Modals** — Alle Modals mit `bg-black/20 backdrop-blur-lg` Backdrop, `bg-white/98 dark:bg-surface-850/98 backdrop-blur-xl` Panel und `shadow-[0_24px_80px_rgba(0,0,0,0.12)]`.
+- **Ueberarbeiteter Player** — Groesserer Player (`h-[152px]`), `sonoma-surface` Hintergrund, Apple-Stil Play-Button (`bg-surface-900 dark:bg-surface-100`), abgerundetes Artwork mit `shadow-sonoma`.
+- **TrackGrid** — Groessere Zeilenhoehe (44px), `rounded-xl` Search-Bar, sanfterer Hover-Effekt, subtilerer Playing-State (`bg-primary-500/6`).
+- **Settings Tags-Section in Language-Section integriert** — Kompakteres Layout in der 2-Spalten-Ansicht.
+- **Twitch SR Duplikat-Erkennung** — Existierende Songs werden direkt aus der Bibliothek in die Warteschlange eingefuegt statt erneut heruntergeladen.
+- macOS-Style Scrollbars (6px, overlay), kleinerer Range-Slider Thumb (12px), duennerer Track (3px)
+
+### Technische Aenderungen
+
+- Design-Tokens: Primary `#0071e3`, Surface-150 `#ececee`, CSS Custom Properties via `@theme`
+- Neues Modul `electron/twitchBot.cjs` — Twitch IRC Client (tmi.js)
+- Neuer Zustand-Store `useTwitchStore` fuer Twitch-Verbindungsstatus
+- Neuer Hook `useTwitchEventHandler` — IPC-Event-Bridge zwischen Main Process und Renderer
+- `AppSettings` Interface um `compactPlayer` und `sidebarCollapsed` erweitert
+- Dependency: `tmi.js` hinzugefuegt
+- Alle `rounded-full` Buttons zu `rounded-xl` migriert (Phase 8 Button-Audit)
+
+---
+
 ## v1.7.1
 
 ### Neue Features

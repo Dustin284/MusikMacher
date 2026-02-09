@@ -375,7 +375,7 @@ export default function LyricsPanel({ track: trackProp }: LyricsPanelProps = {})
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="flex items-center gap-1.5 p-2 border-b border-surface-200/60 dark:border-surface-700/60 shrink-0 flex-wrap">
+      <div className="flex items-center gap-1.5 px-4 py-3 border-b separator-sonoma shrink-0 flex-wrap">
         <button
           onClick={handleSearch}
           disabled={isLoading}
@@ -387,7 +387,7 @@ export default function LyricsPanel({ track: trackProp }: LyricsPanelProps = {})
         <select
           value={provider}
           onChange={(e) => updateSettings({ lyricsProvider: e.target.value as 'lyrics.ovh' | 'genius' | 'lrclib' })}
-          className="text-[11px] py-1 px-1.5 rounded-md border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 text-surface-600 dark:text-surface-400 focus:outline-none focus:ring-1 focus:ring-primary-500/30"
+          className="text-[11px] py-1 px-1.5 rounded-md border-0 bg-surface-200/50 dark:bg-surface-800/50 text-surface-600 dark:text-surface-400 focus:outline-none focus:ring-1 focus:ring-primary-500/30"
         >
           <option value="lyrics.ovh">lyrics.ovh</option>
           <option value="genius">Genius</option>
@@ -397,7 +397,7 @@ export default function LyricsPanel({ track: trackProp }: LyricsPanelProps = {})
         {!isEditing ? (
           <button
             onClick={handleStartEdit}
-            className="px-2.5 py-1 text-[11px] font-medium rounded-md hover:bg-surface-200/60 dark:hover:bg-surface-700/60 text-surface-600 dark:text-surface-400 transition-colors"
+            className="px-2.5 py-1 text-[11px] font-medium rounded-md hover:bg-surface-200/30 dark:hover:bg-surface-700/30 text-surface-600 dark:text-surface-400 transition-colors"
           >
             {t('lyrics.edit')}
           </button>
@@ -416,7 +416,7 @@ export default function LyricsPanel({ track: trackProp }: LyricsPanelProps = {})
           className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-colors disabled:opacity-40 ${
             isSyncMode
               ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
-              : 'hover:bg-surface-200/60 dark:hover:bg-surface-700/60 text-surface-600 dark:text-surface-400'
+              : 'hover:bg-surface-200/30 dark:hover:bg-surface-700/30 text-surface-600 dark:text-surface-400'
           }`}
         >
           {t('lyrics.syncMode')}
@@ -431,7 +431,7 @@ export default function LyricsPanel({ track: trackProp }: LyricsPanelProps = {})
               onChange={(e) => setGeniusUrl(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleFetchUrl()}
               placeholder="Genius URL / ID..."
-              className="w-32 px-2 py-0.5 text-[11px] rounded-md border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 focus:outline-none focus:ring-1 focus:ring-primary-500/30"
+              className="w-32 px-2 py-0.5 text-[11px] rounded-md border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-1 focus:ring-primary-500/30"
             />
             <button
               onClick={handleFetchUrl}
@@ -455,14 +455,14 @@ export default function LyricsPanel({ track: trackProp }: LyricsPanelProps = {})
         />
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="px-2.5 py-1 text-[11px] font-medium rounded-md hover:bg-surface-200/60 dark:hover:bg-surface-700/60 text-surface-600 dark:text-surface-400 transition-colors"
+          className="px-2.5 py-1 text-[11px] font-medium rounded-md hover:bg-surface-200/30 dark:hover:bg-surface-700/30 text-surface-600 dark:text-surface-400 transition-colors"
         >
           {t('lyrics.importLRC')}
         </button>
         <button
           onClick={handleExportLRC}
           disabled={lrcLines.length === 0}
-          className="px-2.5 py-1 text-[11px] font-medium rounded-md hover:bg-surface-200/60 dark:hover:bg-surface-700/60 text-surface-600 dark:text-surface-400 transition-colors disabled:opacity-40"
+          className="px-2.5 py-1 text-[11px] font-medium rounded-md hover:bg-surface-200/30 dark:hover:bg-surface-700/30 text-surface-600 dark:text-surface-400 transition-colors disabled:opacity-40"
         >
           {t('lyrics.exportLRC')}
         </button>
@@ -471,13 +471,13 @@ export default function LyricsPanel({ track: trackProp }: LyricsPanelProps = {})
       {/* Lyrics display area */}
       <div
         ref={lyricsContainerRef}
-        className="flex-1 overflow-y-auto p-3"
+        className="flex-1 overflow-y-auto px-5 py-4"
       >
         {isEditing ? (
           <textarea
             value={editText}
             onChange={(e) => setEditText(e.target.value)}
-            className="w-full h-full min-h-[200px] p-2 text-[13px] leading-relaxed rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 focus:outline-none focus:ring-2 focus:ring-primary-500/30 resize-none font-mono"
+            className="w-full h-full min-h-[200px] p-2 text-[13px] leading-relaxed rounded-lg border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30 resize-none font-mono"
           />
         ) : isSyncMode ? (
           <div className="space-y-1">
@@ -515,9 +515,9 @@ export default function LyricsPanel({ track: trackProp }: LyricsPanelProps = {})
                 <div
                   key={idx}
                   ref={isActive ? activeLineRef : undefined}
-                  className={`px-2 py-1 rounded text-[13px] transition-all duration-200 ${
+                  className={`px-2 py-1.5 rounded-lg text-[13px] transition-all duration-200 ${
                     isActive
-                      ? 'bg-primary-500/15 text-primary-600 dark:text-primary-400 font-semibold scale-[1.01]'
+                      ? 'bg-primary-500/15 text-primary-600 dark:text-primary-400 font-semibold text-[14px] scale-[1.01]'
                       : idx < currentLineIndex
                       ? 'text-surface-400 dark:text-surface-600'
                       : 'text-surface-700 dark:text-surface-300'

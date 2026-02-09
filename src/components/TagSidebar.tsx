@@ -101,7 +101,7 @@ export default function TagSidebar() {
   }, [])
 
   return (
-    <div className="w-56 shrink-0 flex flex-col border-r border-surface-200/60 dark:border-surface-800/60 bg-white/30 dark:bg-surface-900/30 backdrop-blur-md">
+    <div className="w-48 shrink-0 flex flex-col border-r separator-sonoma bg-surface-50 dark:bg-surface-900">
       {/* Tag search */}
       <div className="p-2.5">
         <div className="relative">
@@ -113,7 +113,7 @@ export default function TagSidebar() {
             placeholder={t('tags.search')}
             value={tagSearch}
             onChange={(e) => setTagSearch(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all"
+            className="w-full pl-8 pr-3 py-2 text-[13px] rounded-xl border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all"
           />
         </div>
       </div>
@@ -158,7 +158,7 @@ export default function TagSidebar() {
               <div key={playlist.id} className="group flex items-center rounded-lg">
                 <button
                   onClick={() => setActivePlaylist(activePlaylistId === playlist.id ? null : playlist.id!)}
-                  className={`flex-1 text-left px-2.5 py-1.5 text-[13px] rounded-lg transition-all duration-150 truncate ${
+                  className={`flex-1 text-left px-3 py-2 text-[13px] rounded-lg transition-all duration-150 truncate ${
                     activePlaylistId === playlist.id
                       ? 'bg-primary-500/15 text-primary-700 dark:text-primary-300 font-semibold ring-1 ring-primary-500/20'
                       : 'hover:bg-surface-200/60 dark:hover:bg-surface-800/60'
@@ -236,7 +236,7 @@ export default function TagSidebar() {
               <>
                 <button
                   onClick={() => toggleTag(tag.id!)}
-                  className={`flex-1 text-left px-2.5 py-1.5 text-[13px] rounded-lg transition-all duration-150 truncate ${
+                  className={`flex-1 text-left px-3 py-2 text-[13px] rounded-lg transition-all duration-150 truncate ${
                     dragOverTagId === tag.id
                       ? 'ring-2 ring-primary-500 bg-primary-500/20 scale-[1.02]'
                       : tag.isChecked
@@ -287,7 +287,7 @@ export default function TagSidebar() {
       </div>
 
       {/* Add tag */}
-      <div className="p-2.5 border-t border-surface-200/60 dark:border-surface-800/60">
+      <div className="p-2.5 border-t separator-sonoma">
         <div className="flex gap-1.5">
           <input
             type="text"
@@ -295,11 +295,11 @@ export default function TagSidebar() {
             value={newTagName}
             onChange={(e) => setNewTagName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
-            className="flex-1 px-2.5 py-1.5 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all"
+            className="flex-1 px-2.5 py-1.5 text-[13px] rounded-xl border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all"
           />
           <button
             onClick={handleAddTag}
-            className="w-8 h-8 flex items-center justify-center rounded-lg bg-primary-500 hover:bg-primary-600 text-white transition-all duration-150 active:scale-95 shadow-sm shadow-primary-500/20"
+            className="w-8 h-8 flex items-center justify-center rounded-xl bg-primary-500 hover:bg-primary-600 text-white transition-all duration-150 active:scale-95 shadow-sm shadow-primary-500/20"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />

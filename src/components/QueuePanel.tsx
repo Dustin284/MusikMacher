@@ -11,7 +11,7 @@ export default function QueuePanel() {
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-surface-200/60 dark:border-surface-700/60">
+      <div className="flex items-center justify-between px-4 py-3 border-b separator-sonoma">
         <span className="text-[12px] font-semibold text-surface-500 uppercase tracking-wider">
           {t('player.queue')} ({queue.length})
         </span>
@@ -34,7 +34,7 @@ export default function QueuePanel() {
             {queue.map((item, idx) => (
               <div
                 key={`${item.trackId}-${idx}`}
-                className="flex items-center gap-2 px-3 py-1.5 hover:bg-surface-100/60 dark:hover:bg-surface-800/40 group cursor-pointer"
+                className="flex items-center gap-2 px-4 py-2 hover:bg-surface-100/60 dark:hover:bg-surface-800/40 group cursor-pointer"
                 onDoubleClick={() => {
                   removeFromQueue(idx)
                   play(item.track)

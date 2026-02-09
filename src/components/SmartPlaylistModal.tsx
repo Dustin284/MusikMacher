@@ -87,12 +87,12 @@ export default function SmartPlaylistModal({ isOpen, onClose, playlist, category
 
   return (
     <Dialog open={isOpen} onClose={onClose} className="relative z-50">
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" aria-hidden="true" />
+      <div className="fixed inset-0 bg-black/20 backdrop-blur-lg" aria-hidden="true" />
 
       <div className="fixed inset-0 flex items-center justify-center p-4">
-        <DialogPanel className="w-full max-w-lg rounded-2xl bg-white dark:bg-surface-900 shadow-2xl">
+        <DialogPanel className="w-full max-w-lg rounded-2xl bg-white/98 dark:bg-surface-850/98 backdrop-blur-xl shadow-[0_24px_80px_rgba(0,0,0,0.12)]">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-surface-200 dark:border-surface-800">
+          <div className="flex items-center justify-between p-4 border-b separator-sonoma">
             <DialogTitle className="text-lg font-semibold">
               {playlist ? t('smartPlaylist.edit') : t('smartPlaylist.create')}
             </DialogTitle>
@@ -107,7 +107,7 @@ export default function SmartPlaylistModal({ isOpen, onClose, playlist, category
           </div>
 
           {/* Content */}
-          <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto">
+          <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
             {/* Name input */}
             <div>
               <label className="block text-sm font-medium mb-1.5">{t('smartPlaylist.name')}</label>
@@ -116,7 +116,7 @@ export default function SmartPlaylistModal({ isOpen, onClose, playlist, category
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={t('smartPlaylist.namePlaceholder')}
-                className="w-full px-3 py-2 text-[14px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500"
+                className="w-full px-3 py-2 text-[14px] rounded-xl border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
               />
             </div>
 
@@ -192,17 +192,17 @@ export default function SmartPlaylistModal({ isOpen, onClose, playlist, category
           </div>
 
           {/* Footer */}
-          <div className="flex justify-end gap-2 p-4 border-t border-surface-200 dark:border-surface-800">
+          <div className="flex justify-end gap-2 p-5 border-t separator-sonoma">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-[14px] rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
+              className="px-5 py-2.5 text-[14px] rounded-xl hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
             >
               {t('confirm.cancel')}
             </button>
             <button
               onClick={handleSave}
               disabled={!name.trim() || rules.length === 0 || isSaving}
-              className="px-4 py-2 text-[14px] rounded-lg bg-primary-500 hover:bg-primary-600 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-5 py-2.5 text-[14px] rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSaving ? t('app.loading') : (playlist ? t('smartPlaylist.save') : t('smartPlaylist.create'))}
             </button>

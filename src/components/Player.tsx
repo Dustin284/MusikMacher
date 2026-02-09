@@ -314,14 +314,16 @@ export default function Player() {
 
   const eqHasChanges = eqBass !== 0 || eqMid !== 0 || eqTreble !== 0
 
+  const isCompact = settings.compactPlayer ?? false
+
   if (!currentTrack) {
     return (
-      <div className="h-36 border-t border-surface-200/60 dark:border-surface-800/60 bg-white/40 dark:bg-surface-900/40 backdrop-blur-xl flex items-center justify-center">
+      <div className={`${isCompact ? 'h-16' : 'h-[152px]'} player-transition border-t separator-sonoma sonoma-surface flex items-center justify-center`}>
         <div className="flex flex-col items-center gap-2 text-surface-400 dark:text-surface-600">
           <svg className="w-8 h-8 opacity-40" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
           </svg>
-          <span className="text-xs">{t('player.doubleClick')}</span>
+          {!isCompact && <span className="text-xs">{t('player.doubleClick')}</span>}
         </div>
       </div>
     )
@@ -329,28 +331,119 @@ export default function Player() {
 
   const cuePoints = currentTrack.cuePoints || []
 
+  // Compact mini-player
+  if (isCompact) {
+    return (
+      <>
+        {showQueue && (
+          <div className="h-48 border-t separator-sonoma sonoma-surface overflow-hidden">
+            <QueuePanel />
+          </div>
+        )}
+        {showLyrics && (
+          <div className="h-64 border-t separator-sonoma sonoma-surface overflow-hidden">
+            <LyricsPanel />
+          </div>
+        )}
+        <div className="h-16 border-t separator-sonoma sonoma-surface flex items-center px-4 gap-3 relative">
+          {/* Mini artwork */}
+          <div className="w-10 h-10 shrink-0 rounded-lg overflow-hidden shadow-sonoma">
+            {currentTrack.artworkUrl ? (
+              <img src={currentTrack.artworkUrl} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-surface-200 to-surface-300 dark:from-surface-700 dark:to-surface-800 flex items-center justify-center">
+                <svg className="w-5 h-5 text-surface-400" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+                </svg>
+              </div>
+            )}
+          </div>
+
+          {/* Title + Artist */}
+          <div className="min-w-0 w-40 shrink-0">
+            <div className="text-[13px] font-semibold truncate">{currentTrack.name}</div>
+            {currentTrack.artist && <div className="text-[11px] text-surface-500 truncate">{currentTrack.artist}</div>}
+          </div>
+
+          {/* Prev / Play / Next */}
+          <div className="flex items-center gap-1">
+            <button onClick={() => skipBackward(settings.skipPositionMovement)} className="p-1.5 rounded-lg hover:bg-surface-200/60 dark:hover:bg-surface-800/60 transition-colors">
+              <svg className="w-4 h-4 text-surface-600 dark:text-surface-400" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z" /></svg>
+            </button>
+            <button onClick={playPause} className="p-2.5 rounded-xl bg-surface-900 dark:bg-surface-100 text-white dark:text-surface-900 hover:opacity-90 transition-all active:scale-95">
+              {isPlaying ? (
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" /></svg>
+              ) : (
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+              )}
+            </button>
+            <button onClick={() => skipForward(settings.skipPositionMovement)} className="p-1.5 rounded-lg hover:bg-surface-200/60 dark:hover:bg-surface-800/60 transition-colors">
+              <svg className="w-4 h-4 text-surface-600 dark:text-surface-400" fill="currentColor" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z" /></svg>
+            </button>
+          </div>
+
+          {/* Progress bar - thin */}
+          <div className="flex-1 flex items-center gap-2 min-w-0">
+            <span className="text-[10px] font-mono text-surface-500 tabular-nums shrink-0"><PositionTime /></span>
+            <div className="flex-1 h-[3px] bg-surface-200 dark:bg-surface-700 rounded-full cursor-pointer relative group"
+              onClick={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect()
+                const pct = (e.clientX - rect.left) / rect.width
+                seek(pct * duration)
+              }}
+            >
+              <div className="absolute inset-0 h-full rounded-full bg-surface-900 dark:bg-surface-100 transition-all" style={{ width: `${duration > 0 ? (usePlayerStore.getState().position / duration) * 100 : 0}%` }} />
+            </div>
+            <span className="text-[10px] font-mono text-surface-500 tabular-nums shrink-0">{formatTime(duration)}</span>
+          </div>
+
+          {/* Volume */}
+          <div className="flex items-center gap-1.5">
+            <button onClick={() => setVolume(volume > 0 ? 0 : 0.5)} className="p-1 rounded-lg hover:bg-surface-200/60 dark:hover:bg-surface-800/60 transition-colors">
+              {volume === 0 ? (
+                <svg className="w-3.5 h-3.5 text-surface-400" fill="currentColor" viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" /></svg>
+              ) : (
+                <svg className="w-3.5 h-3.5 text-surface-400" fill="currentColor" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>
+              )}
+            </button>
+            <input type="range" min="0" max="1" step="0.01" value={volume} onChange={(e) => setVolume(parseFloat(e.target.value))} className="w-16" />
+          </div>
+
+          {/* Queue / Lyrics toggles */}
+          <button onClick={toggleQueue} className={`p-2 rounded-lg text-[11px] font-medium transition-all ${showQueue ? 'text-primary-500 bg-primary-500/10' : 'text-surface-400 hover:bg-surface-100/60'}`}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h8" /></svg>
+          </button>
+          <button onClick={toggleLyrics} className={`p-2 rounded-lg text-[11px] font-medium transition-all ${showLyrics ? 'text-primary-500 bg-primary-500/10' : 'text-surface-400 hover:bg-surface-100/60'}`}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2" /></svg>
+          </button>
+        </div>
+      </>
+    )
+  }
+
+  // Normal (full) player
   return (
     <>
       {showQueue && (
-        <div className="h-48 border-t border-surface-200/60 dark:border-surface-700/60 bg-white/30 dark:bg-surface-900/30 backdrop-blur-xl overflow-hidden">
+        <div className="h-48 border-t separator-sonoma sonoma-surface overflow-hidden">
           <QueuePanel />
         </div>
       )}
       {showLyrics && (
-        <div className="h-64 border-t border-surface-200/60 dark:border-surface-700/60 bg-white/30 dark:bg-surface-900/30 backdrop-blur-xl overflow-hidden">
+        <div className="h-64 border-t separator-sonoma sonoma-surface overflow-hidden">
           <LyricsPanel />
         </div>
       )}
-      <div className="h-36 border-t border-surface-200/60 dark:border-surface-800/60 bg-white/50 dark:bg-surface-900/50 backdrop-blur-xl flex gap-4 p-3 relative">
+      <div className="h-[152px] border-t separator-sonoma sonoma-surface flex gap-4 p-4 relative">
         {/* Ambient color from artwork */}
         {currentTrack.artworkUrl && (
           <div className="absolute inset-0 pointer-events-none overflow-hidden">
-            <img src={currentTrack.artworkUrl} className="absolute inset-0 w-full h-full object-cover blur-[80px] opacity-10 dark:opacity-[0.07] scale-150" alt="" />
+            <img src={currentTrack.artworkUrl} className="absolute inset-0 w-full h-full object-cover blur-[80px] opacity-8 dark:opacity-[0.05] scale-150" alt="" />
           </div>
         )}
 
         {/* Artwork */}
-        <div className="w-[112px] h-[112px] shrink-0 rounded-xl overflow-hidden shadow-lg relative group">
+        <div className="w-[120px] h-[120px] shrink-0 rounded-lg overflow-hidden shadow-sonoma relative group">
           {currentTrack.artworkUrl ? (
             <img src={currentTrack.artworkUrl} alt="" className="w-full h-full object-cover" />
           ) : (
@@ -359,9 +452,6 @@ export default function Player() {
                 <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
               </svg>
             </div>
-          )}
-          {isPlaying && (
-            <div className="absolute inset-0 bg-primary-500/10 animate-pulse" />
           )}
         </div>
 
@@ -475,7 +565,7 @@ export default function Player() {
             {/* Play/Pause */}
             <button
               onClick={playPause}
-              className="p-2 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 hover:from-primary-500 hover:to-primary-700 text-white shadow-lg shadow-primary-500/25 transition-all duration-150 active:scale-95"
+              className="p-2.5 rounded-xl bg-surface-900 dark:bg-surface-100 text-white dark:text-surface-900 hover:opacity-90 transition-all duration-150 active:scale-95"
             >
               {isPlaying ? (
                 <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -599,7 +689,7 @@ export default function Player() {
               {showEqPanel && createPortal(
                 <div
                   ref={eqPanelRef}
-                  className="fixed rounded-2xl shadow-2xl border border-surface-200/60 dark:border-surface-700/50 bg-white/90 dark:bg-surface-850/95 backdrop-blur-2xl overflow-hidden"
+                  className="fixed rounded-2xl shadow-sonoma border border-surface-200/30 dark:border-surface-700/30 bg-white/98 dark:bg-surface-850/98 backdrop-blur-xl overflow-hidden"
                   style={{ minWidth: 220, bottom: eqPanelPos.bottom, left: eqPanelPos.left, transform: 'translateX(-50%)', zIndex: 9999 }}
                 >
                   {/* Header */}
@@ -676,7 +766,7 @@ export default function Player() {
               {showFxPanel && createPortal(
                 <div
                   ref={fxPanelRef}
-                  className="fixed rounded-2xl shadow-2xl border border-surface-200/60 dark:border-surface-700/50 bg-white/90 dark:bg-surface-850/95 backdrop-blur-2xl overflow-hidden"
+                  className="fixed rounded-2xl shadow-sonoma border border-surface-200/30 dark:border-surface-700/30 bg-white/98 dark:bg-surface-850/98 backdrop-blur-xl overflow-hidden"
                   style={{ minWidth: 280, maxHeight: 400, overflowY: 'auto', bottom: fxPanelPos.bottom, left: fxPanelPos.left, transform: 'translateX(-50%)', zIndex: 9999 }}
                 >
                   {/* Reverb Section */}

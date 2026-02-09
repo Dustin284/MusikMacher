@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { Tab, TabGroup, TabList, TabPanel, TabPanels } from '@headlessui/react'
 import { useSettingsStore } from './store/useSettingsStore'
 import { useLibraryStore } from './store/useLibraryStore'
 import { useProjectStore } from './store/useProjectStore'
@@ -11,6 +10,8 @@ import Statistics from './components/Statistics'
 import Import from './components/Import'
 import PremiereLoader from './components/PremiereLoader'
 import Settings from './components/Settings'
+import Player from './components/Player'
+import { useTwitchEventHandler } from './hooks/useTwitchEventHandler'
 
 const fixedTabIcons = [
   'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
@@ -233,6 +234,24 @@ export default function App() {
     }).catch(() => {})
   }, [loaded])
 
+  // Twitch chatbot event handler (IPC → Zustand store)
+  useTwitchEventHandler()
+
+  // Auto-connect Twitch bot if enabled
+  useEffect(() => {
+    if (!loaded) return
+    if (settings.twitchEnabled && settings.twitchChannel && window.electronAPI?.twitchConnect) {
+      window.electronAPI.twitchConnect({
+        channel: settings.twitchChannel,
+        oauthToken: settings.twitchOAuthToken,
+        botUsername: settings.twitchBotUsername,
+        voteskipThreshold: settings.twitchVoteskipThreshold ?? 3,
+        songRequestEnabled: settings.twitchSongRequestEnabled ?? true,
+        modSkipEnabled: settings.twitchModSkipEnabled ?? true,
+      }).catch(() => {})
+    }
+  }, [loaded])
+
   // Shortcuts overlay toggle (Shift + ?)
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -258,21 +277,14 @@ export default function App() {
     )
   }
 
-  // Build tab list: libraries first, then fixed tabs (Import, Premiere, Settings)
+  // Build tab list: libraries first, then fixed tabs
   const libraryTabs = libraries.length > 0 ? libraries : [
     { id: CATEGORY_TRACKS, name: 'Songs', icon: 'music', order: 0, isOpen: true },
     { id: CATEGORY_EFFECTS, name: 'Effekte', icon: 'speaker', order: 1, isOpen: true },
   ]
 
-  const totalTabs = libraryTabs.length + fixedTabKeys.length
-
   return (
-    <div className="h-full flex flex-col bg-surface-50 dark:bg-surface-950 text-surface-900 dark:text-surface-100 noise relative overflow-hidden">
-      {/* Ambient gradient background */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute -top-1/2 -right-1/4 w-[600px] h-[600px] rounded-full bg-primary-500/5 dark:bg-primary-500/[0.03] blur-3xl" />
-        <div className="absolute -bottom-1/2 -left-1/4 w-[500px] h-[500px] rounded-full bg-accent-500/5 dark:bg-accent-500/[0.02] blur-3xl" />
-      </div>
+    <div className="h-full flex flex-col bg-surface-50 dark:bg-surface-950 text-surface-900 dark:text-surface-100 relative overflow-hidden">
 
       {/* Update banner */}
       {updateAvailable && (
@@ -295,7 +307,7 @@ export default function App() {
           {githubChangelog && (
             <button
               onClick={() => setShowChangelog(true)}
-              className="px-2 py-0.5 rounded bg-white/20 hover:bg-white/30 text-[11px] font-medium transition-colors"
+              className="px-2 py-0.5 rounded-xl bg-white/20 hover:bg-white/30 text-[11px] font-medium transition-colors"
             >
               Changelog
             </button>
@@ -304,11 +316,23 @@ export default function App() {
       )}
 
       {/* Title bar */}
-      <div className="h-11 shrink-0 flex items-center px-4 border-b border-surface-200/80 dark:border-surface-800/80 bg-white/60 dark:bg-surface-900/60 backdrop-blur-xl select-none relative z-10"
+      <div className="h-12 shrink-0 flex items-center px-4 border-b separator-sonoma sonoma-surface select-none relative z-10"
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       >
+        {/* Sidebar toggle */}
+        <button
+          onClick={() => useSettingsStore.getState().update({ sidebarCollapsed: !settings.sidebarCollapsed })}
+          className="p-1.5 rounded-lg hover:bg-surface-200/60 dark:hover:bg-surface-800/60 transition-colors mr-2"
+          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+          title="Toggle Sidebar"
+        >
+          <svg className="w-4 h-4 text-surface-500" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+          </svg>
+        </button>
+
         <div className="flex items-center gap-2.5">
-          <div className="w-6 h-6 rounded-md bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center shadow-sm">
+          <div className="w-6 h-6 rounded-lg bg-primary-500 flex items-center justify-center shadow-sm">
             <svg className="w-3.5 h-3.5 text-white" fill="currentColor" viewBox="0 0 24 24">
               <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
             </svg>
@@ -321,7 +345,7 @@ export default function App() {
           <select
             value={selectedProjectId ?? ''}
             onChange={(e) => setSelectedProject(e.target.value ? Number(e.target.value) : null)}
-            className="text-[11px] bg-transparent border border-surface-300/60 dark:border-surface-700/60 rounded-md px-2 py-0.5 text-surface-600 dark:text-surface-400 focus:outline-none focus:ring-1 focus:ring-primary-500/30"
+            className="text-[11px] bg-transparent border border-surface-300/40 dark:border-surface-700/40 rounded-lg px-2 py-0.5 text-surface-600 dark:text-surface-400 focus:outline-none focus:ring-1 focus:ring-primary-500/30"
           >
             <option value="">{t('project.all')}</option>
             {projects.map(p => (
@@ -330,7 +354,7 @@ export default function App() {
           </select>
           <button
             onClick={() => setPromptDialog({ title: t('project.name'), onSubmit: (name) => addProj(name) })}
-            className="p-0.5 rounded hover:bg-surface-200/80 dark:hover:bg-surface-800/80 transition-colors text-surface-400"
+            className="p-1 rounded-lg hover:bg-surface-200/60 dark:hover:bg-surface-800/60 transition-colors text-surface-400"
             title={t('project.new')}
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
@@ -341,109 +365,142 @@ export default function App() {
 
       </div>
 
-      {/* Tab layout - using static panels so Browse stays mounted */}
-      <TabGroup selectedIndex={selectedTab} onChange={(idx) => {
-        setSelectedTab(idx)
-        requestAnimationFrame(() => (document.activeElement as HTMLElement)?.blur())
-      }} manual className="flex-1 flex flex-col min-h-0 relative z-10">
-        <TabList className="flex shrink-0 border-b border-surface-200/60 dark:border-surface-800/60 bg-white/40 dark:bg-surface-900/40 backdrop-blur-lg px-1 gap-0.5">
-          {/* Library tabs */}
+      {/* Main layout: Sidebar + Content */}
+      <div className="flex flex-1 min-h-0 relative z-10">
+
+        {/* Sidebar */}
+        <aside className={`${settings.sidebarCollapsed ? 'w-[56px]' : 'w-[220px]'} sidebar-transition shrink-0 flex flex-col pt-3 pb-3 bg-surface-150/80 dark:bg-surface-900/80 border-r separator-sonoma select-none overflow-y-auto overflow-x-hidden`}>
+
+          {/* Section: Libraries */}
+          {!settings.sidebarCollapsed && (
+            <div className="px-4 pt-1 pb-1 text-[11px] font-semibold text-surface-400 uppercase tracking-wider">
+              {t('sidebar.libraries')}
+            </div>
+          )}
+
           {libraryTabs.map((lib, idx) => (
-            <Tab
+            <button
               key={`lib-${lib.id}`}
-              className="group relative px-3 py-2.5 text-[13px] font-medium outline-none transition-all duration-200
-                data-[selected]:text-primary-600 dark:data-[selected]:text-primary-400
-                text-surface-500 hover:text-surface-700 dark:hover:text-surface-300
-                focus-visible:ring-2 focus-visible:ring-primary-500/50 rounded-lg my-1"
+              onClick={() => setSelectedTab(idx)}
+              title={settings.sidebarCollapsed ? lib.name : undefined}
+              className={`mx-2 ${settings.sidebarCollapsed ? 'px-0 justify-center' : 'px-3.5'} py-2 rounded-lg text-[13px] font-medium flex items-center gap-2.5 transition-all duration-150 ${
+                selectedTab === idx
+                  ? 'bg-surface-200/80 dark:bg-surface-800/60 text-primary-500'
+                  : 'text-surface-600 dark:text-surface-400 hover:bg-surface-200/50 dark:hover:bg-surface-800/40'
+              }`}
             >
-              <span className="flex items-center gap-1.5">
-                <svg className="w-4 h-4 opacity-60 group-data-[selected]:opacity-100 transition-opacity" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d={libraryIcons[lib.icon || 'music'] || libraryIcons.music} />
-                </svg>
-                {lib.name}
-                {libraries.length > 1 && lib.id !== 1 && lib.id !== 2 && (
-                  <span
-                    role="button"
-                    onMouseDown={async (e) => {
-                      e.stopPropagation()
-                      e.preventDefault()
-                      const removed = await removeLib(lib.id!)
-                      if (removed) {
-                        if (selectedTab >= libraries.length - 1) setSelectedTab(Math.max(0, selectedTab - 1))
-                      } else {
-                        alert(t('app.removeLibraryNotEmpty'))
-                      }
-                    }}
-                    className="ml-0.5 p-0.5 rounded opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-surface-200/80 dark:hover:bg-surface-700/80 transition-all cursor-pointer"
-                    title={t('app.removeLibrary')}
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </span>
-                )}
-              </span>
-              <div className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-primary-500 scale-x-0 group-data-[selected]:scale-x-100 transition-transform duration-200 origin-center" />
-            </Tab>
+              <svg className={`w-4 h-4 shrink-0 transition-opacity ${selectedTab === idx ? 'opacity-100' : 'opacity-60'}`} fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d={libraryIcons[lib.icon || 'music'] || libraryIcons.music} />
+              </svg>
+              {!settings.sidebarCollapsed && (
+                <>
+                  <span className="flex-1 truncate text-left">{lib.name}</span>
+                  {libraries.length > 1 && lib.id !== 1 && lib.id !== 2 && (
+                    <span
+                      role="button"
+                      onMouseDown={async (e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                        const removed = await removeLib(lib.id!)
+                        if (removed) {
+                          if (selectedTab >= libraries.length - 1) setSelectedTab(Math.max(0, selectedTab - 1))
+                        } else {
+                          alert(t('app.removeLibraryNotEmpty'))
+                        }
+                      }}
+                      className="p-0.5 rounded opacity-0 group-hover:opacity-60 hover:!opacity-100 hover:bg-surface-200/80 dark:hover:bg-surface-700/80 transition-all cursor-pointer"
+                      title={t('app.removeLibrary')}
+                    >
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </span>
+                  )}
+                </>
+              )}
+            </button>
           ))}
 
           {/* Add library button */}
-          <button
-            onClick={() => setPromptDialog({ title: t('app.newLibraryName'), onSubmit: (name) => addLib(name) })}
-            className="px-2 py-2.5 text-surface-400 hover:text-primary-500 transition-colors my-1"
-            title={t('app.newLibrary')}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-          </button>
-
-          {/* Separator */}
-          <div className="w-px bg-surface-200/60 dark:bg-surface-800/60 my-2 mx-1" />
-
-          {/* Fixed tabs: Import, Premiere, Settings */}
-          {fixedTabKeys.map((key, idx) => (
-            <Tab
-              key={key}
-              className="group relative px-3 py-2.5 text-[13px] font-medium outline-none transition-all duration-200
-                data-[selected]:text-primary-600 dark:data-[selected]:text-primary-400
-                text-surface-500 hover:text-surface-700 dark:hover:text-surface-300
-                focus-visible:ring-2 focus-visible:ring-primary-500/50 rounded-lg my-1"
+          {!settings.sidebarCollapsed && (
+            <button
+              onClick={() => setPromptDialog({ title: t('app.newLibraryName'), onSubmit: (name) => addLib(name) })}
+              className="mx-2 px-3.5 py-2 text-[13px] text-surface-400 hover:text-primary-500 transition-colors flex items-center gap-2.5"
+              title={t('app.newLibrary')}
             >
-              <span className="flex items-center gap-1.5">
-                <svg className="w-4 h-4 opacity-60 group-data-[selected]:opacity-100 transition-opacity" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              {t('app.newLibrary')}
+            </button>
+          )}
+
+          {/* Divider */}
+          <div className="mx-4 my-2 border-t separator-sonoma" />
+
+          {/* Section: Tools */}
+          {!settings.sidebarCollapsed && (
+            <div className="px-4 pt-1 pb-1 text-[11px] font-semibold text-surface-400 uppercase tracking-wider">
+              {t('sidebar.tools')}
+            </div>
+          )}
+
+          {fixedTabKeys.map((key, idx) => {
+            const tabIdx = libraryTabs.length + idx
+            return (
+              <button
+                key={key}
+                onClick={() => setSelectedTab(tabIdx)}
+                title={settings.sidebarCollapsed ? t(key) : undefined}
+                className={`mx-2 ${settings.sidebarCollapsed ? 'px-0 justify-center' : 'px-3.5'} py-2 rounded-lg text-[13px] font-medium flex items-center gap-2.5 transition-all duration-150 ${
+                  selectedTab === tabIdx
+                    ? 'bg-surface-200/80 dark:bg-surface-800/60 text-primary-500'
+                    : 'text-surface-600 dark:text-surface-400 hover:bg-surface-200/50 dark:hover:bg-surface-800/40'
+                }`}
+              >
+                <svg className={`w-4 h-4 shrink-0 transition-opacity ${selectedTab === tabIdx ? 'opacity-100' : 'opacity-60'}`} fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d={fixedTabIcons[idx]} />
                 </svg>
-                {t(key)}
-              </span>
-              <div className="absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-primary-500 scale-x-0 group-data-[selected]:scale-x-100 transition-transform duration-200 origin-center" />
-            </Tab>
-          ))}
-        </TabList>
+                {!settings.sidebarCollapsed && t(key)}
+              </button>
+            )
+          })}
 
-        <TabPanels className="flex-1 min-h-0">
-          {/* Library panels - static so keyboard listeners survive tab switches */}
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Version */}
+          {!settings.sidebarCollapsed && (
+            <div className="px-4 py-2 text-[10px] text-surface-400">v1.7.2</div>
+          )}
+        </aside>
+
+        {/* Content Area */}
+        <main className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
           {libraryTabs.map((lib, idx) => (
-            <TabPanel key={`panel-${lib.id}`} static className={`h-full ${selectedTab !== idx ? 'hidden' : ''}`}>
+            <div key={`panel-${lib.id}`} className={`h-full ${selectedTab !== idx ? 'hidden' : ''}`}>
               <Browse category={lib.id!} isActive={selectedTab === idx} />
-            </TabPanel>
+            </div>
           ))}
-
-          {/* Fixed panels - also static */}
-          <TabPanel static className={`h-full ${selectedTab !== libraryTabs.length ? 'hidden' : ''}`}>
+          <div className={`h-full ${selectedTab !== libraryTabs.length ? 'hidden' : ''}`}>
             <Statistics />
-          </TabPanel>
-          <TabPanel static className={`h-full ${selectedTab !== libraryTabs.length + 1 ? 'hidden' : ''}`}>
+          </div>
+          <div className={`h-full ${selectedTab !== libraryTabs.length + 1 ? 'hidden' : ''}`}>
             <Import initialDownloadUrl={pendingDownloadUrl ?? undefined} onInitialUrlConsumed={() => setPendingDownloadUrl(null)} />
-          </TabPanel>
-          <TabPanel static className={`h-full ${selectedTab !== libraryTabs.length + 2 ? 'hidden' : ''}`}>
+          </div>
+          <div className={`h-full ${selectedTab !== libraryTabs.length + 2 ? 'hidden' : ''}`}>
             <PremiereLoader />
-          </TabPanel>
-          <TabPanel static className={`h-full ${selectedTab !== libraryTabs.length + 3 ? 'hidden' : ''}`}>
+          </div>
+          <div className={`h-full ${selectedTab !== libraryTabs.length + 3 ? 'hidden' : ''}`}>
             <Settings />
-          </TabPanel>
-        </TabPanels>
-      </TabGroup>
+          </div>
+        </main>
+      </div>
+
+      {/* Player - always visible at bottom */}
+      <div className="shrink-0">
+        <Player />
+      </div>
 
       {/* Prompt dialog (replaces window.prompt which is blocked in Electron) */}
       {promptDialog && (
@@ -456,16 +513,16 @@ export default function App() {
 
       {/* Changelog modal */}
       {showChangelog && githubChangelog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowChangelog(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-lg" onClick={() => setShowChangelog(false)}>
           <div
-            className="bg-white dark:bg-surface-800 rounded-xl shadow-2xl border border-surface-200/60 dark:border-surface-700/60 p-6 w-[480px] max-h-[80vh] flex flex-col"
+            className="bg-white/98 dark:bg-surface-850/98 backdrop-blur-xl rounded-2xl shadow-[0_24px_80px_rgba(0,0,0,0.12)] p-7 w-[480px] max-h-[80vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-[15px] font-semibold">
                 {githubUpdateVersion ? `Changelog — v${githubUpdateVersion}` : 'Changelog'}
               </h2>
-              <button onClick={() => setShowChangelog(false)} className="p-1 rounded-lg hover:bg-surface-200/80 dark:hover:bg-surface-700/80 transition-colors">
+              <button onClick={() => setShowChangelog(false)} className="p-1.5 rounded-lg hover:bg-surface-200/80 dark:hover:bg-surface-700/80 transition-colors">
                 <svg className="w-4 h-4 text-surface-400" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -480,7 +537,7 @@ export default function App() {
             <div className="mt-4 flex justify-end gap-2">
               <button
                 onClick={() => setShowChangelog(false)}
-                className="px-3 py-1.5 text-[12px] rounded-lg border border-surface-300/60 dark:border-surface-600/60 text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700/50 transition-colors"
+                className="px-5 py-2.5 text-[13px] rounded-xl bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 hover:bg-surface-200 dark:hover:bg-surface-700 transition-colors font-medium"
               >
                 {t('app.close')}
               </button>
@@ -501,7 +558,7 @@ export default function App() {
                       window.electronAPI?.openExternal?.(githubUpdateUrl)
                     }
                   }}
-                  className="px-3 py-1.5 text-[12px] rounded-lg bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-60 transition-colors flex items-center gap-1.5"
+                  className="px-5 py-2.5 text-[13px] rounded-xl bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-60 transition-colors flex items-center gap-1.5 font-medium shadow-sm"
                 >
                   {updateDownloading && (
                     <div className="w-3 h-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
@@ -516,14 +573,14 @@ export default function App() {
 
       {/* Keyboard shortcuts overlay (Shift+?) */}
       {showShortcuts && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowShortcuts(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-lg" onClick={() => setShowShortcuts(false)}>
           <div
-            className="bg-white dark:bg-surface-800 rounded-xl shadow-2xl border border-surface-200/60 dark:border-surface-700/60 p-6 w-96 max-h-[80vh] overflow-y-auto"
+            className="bg-white/98 dark:bg-surface-850/98 backdrop-blur-xl rounded-2xl shadow-[0_24px_80px_rgba(0,0,0,0.12)] p-7 w-96 max-h-[80vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-[15px] font-semibold">{t('settings.shortcuts')}</h2>
-              <button onClick={() => setShowShortcuts(false)} className="p-1 rounded-lg hover:bg-surface-200/80 dark:hover:bg-surface-700/80 transition-colors">
+              <button onClick={() => setShowShortcuts(false)} className="p-1.5 rounded-lg hover:bg-surface-200/80 dark:hover:bg-surface-700/80 transition-colors">
                 <svg className="w-4 h-4 text-surface-400" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -535,7 +592,7 @@ export default function App() {
                 .map(s => (
                 <div key={s.action} className="contents">
                   <span className="text-[13px] text-surface-600 dark:text-surface-400">{s.action}</span>
-                  <kbd className="px-2 py-0.5 rounded bg-surface-200/60 dark:bg-surface-700/60 text-[11px] font-mono text-surface-600 dark:text-surface-400 text-right">
+                  <kbd className="px-2 py-0.5 rounded-lg bg-surface-200/60 dark:bg-surface-700/60 text-[11px] font-mono text-surface-600 dark:text-surface-400 text-right">
                     {s.key}
                   </kbd>
                 </div>
@@ -565,9 +622,9 @@ function PromptDialog({ title, onSubmit, onCancel }: { title: string; onSubmit: 
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onCancel}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-lg" onClick={onCancel}>
       <div
-        className="bg-white dark:bg-surface-800 rounded-xl shadow-2xl border border-surface-200/60 dark:border-surface-700/60 p-5 w-80"
+        className="bg-white/98 dark:bg-surface-850/98 backdrop-blur-xl rounded-2xl shadow-[0_24px_80px_rgba(0,0,0,0.12)] p-7 w-80"
         onClick={(e) => e.stopPropagation()}
       >
         <label className="block text-[13px] font-medium text-surface-700 dark:text-surface-300 mb-2">{title}</label>
@@ -577,17 +634,16 @@ function PromptDialog({ title, onSubmit, onCancel }: { title: string; onSubmit: 
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); if (e.key === 'Escape') onCancel() }}
-          className="w-full px-3 py-2 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-900/80 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all"
+          className="w-full px-3 py-2.5 text-[13px] rounded-xl border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all"
         />
         <div className="flex justify-end gap-2 mt-4">
-          <button onClick={onCancel} className="px-3 py-1.5 text-[13px] rounded-lg text-surface-500 hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors">
-            {/* Cancel */}
+          <button onClick={onCancel} className="px-5 py-2.5 text-[13px] rounded-xl text-surface-700 bg-surface-100 dark:bg-surface-800 hover:bg-surface-200 dark:hover:bg-surface-700 transition-colors font-medium">
             Abbrechen
           </button>
           <button
             onClick={handleSubmit}
             disabled={!value.trim()}
-            className="px-4 py-1.5 text-[13px] font-medium rounded-lg bg-primary-500 hover:bg-primary-600 text-white disabled:opacity-40 transition-colors"
+            className="px-5 py-2.5 text-[13px] font-medium rounded-xl bg-primary-500 hover:bg-primary-600 text-white disabled:opacity-40 transition-colors shadow-sm"
           >
             OK
           </button>

@@ -160,13 +160,13 @@ export default function PremiereLoader() {
   }
 
   return (
-    <div className="p-6 flex flex-col gap-4 h-full">
+    <div className="p-8 flex flex-col gap-4 h-full">
       {/* File picker */}
       <div className="flex items-center gap-3">
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={loading}
-          className="px-4 py-2 text-sm font-medium rounded-lg bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 transition-colors"
+          className="px-5 py-2.5 text-sm font-medium rounded-xl shadow-sm bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 transition-colors"
         >
           {t('premiere.loadProject')}
         </button>
@@ -188,7 +188,7 @@ export default function PremiereLoader() {
         ref={logRef}
         readOnly
         value={log_}
-        className="h-40 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 p-3 text-xs font-mono text-zinc-600 dark:text-zinc-400 resize-none"
+        className="h-40 rounded-xl border-0 bg-surface-200/50 dark:bg-surface-800/50 p-3 text-xs font-mono text-zinc-600 dark:text-zinc-400 resize-none"
       />
 
       {/* Filters */}
@@ -215,9 +215,9 @@ export default function PremiereLoader() {
       </div>
 
       {/* Clips table */}
-      <div className="flex-1 overflow-auto rounded-lg border border-zinc-200 dark:border-zinc-700">
+      <div className="flex-1 overflow-auto rounded-2xl border-0 shadow-sonoma">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-zinc-100 dark:bg-zinc-800 border-b border-zinc-200 dark:border-zinc-700">
+          <thead className="sticky top-0 bg-surface-100 dark:bg-surface-900 border-b separator-sonoma">
             <tr>
               <th className="w-16 px-3 py-2 text-left">{t('premiere.include')}</th>
               <th className="px-3 py-2 text-left">{t('premiere.name')}</th>
@@ -235,7 +235,7 @@ export default function PremiereLoader() {
               return (
                 <tr
                   key={clip.id}
-                  className="border-b border-zinc-100 dark:border-zinc-800 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                  className="border-b border-surface-200/30 dark:border-surface-800/30 hover:bg-surface-100/60 dark:hover:bg-surface-800/30"
                 >
                   <td className="px-3 py-1.5">
                     <input
@@ -269,19 +269,19 @@ export default function PremiereLoader() {
         <button
           onClick={handleGenerate}
           disabled={clips.length === 0}
-          className="px-4 py-2 text-sm font-medium rounded-lg bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 transition-colors shrink-0"
+          className="px-5 py-2.5 text-sm font-medium rounded-xl shadow-sm bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50 transition-colors shrink-0"
         >
           {t('premiere.generateTimestamps')}
         </button>
         <button
           onClick={handleExportEDL}
           disabled={clips.length === 0}
-          className="px-4 py-2 text-sm font-medium rounded-lg border border-primary-500 text-primary-500 hover:bg-primary-500/10 disabled:opacity-50 transition-colors shrink-0"
+          className="px-5 py-2.5 text-sm font-medium rounded-xl border border-primary-500 text-primary-500 hover:bg-primary-500/10 disabled:opacity-50 transition-colors shrink-0"
         >
           EDL Export
         </button>
         {timestamps && (
-          <pre className="flex-1 p-2 rounded-lg bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 text-xs font-mono text-zinc-600 dark:text-zinc-400 max-h-32 overflow-auto">
+          <pre className="flex-1 p-2 rounded-xl bg-zinc-50 dark:bg-zinc-800/50 border-0 shadow-sonoma text-xs font-mono text-zinc-600 dark:text-zinc-400 max-h-32 overflow-auto">
             {timestamps}
           </pre>
         )}

@@ -108,7 +108,7 @@ export default function SmartPlaylistRuleRow({ rule, tags, onChange, onRemove }:
       <select
         value={rule.field}
         onChange={(e) => handleFieldChange(e.target.value as FieldType)}
-        className="flex-1 min-w-0 px-2 py-1.5 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+        className="flex-1 min-w-0 px-2 py-1.5 text-[13px] rounded-xl border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
       >
         {FIELDS.map(f => (
           <option key={f.value} value={f.value}>{t(f.labelKey as keyof typeof t)}</option>
@@ -119,7 +119,7 @@ export default function SmartPlaylistRuleRow({ rule, tags, onChange, onRemove }:
       <select
         value={rule.operator}
         onChange={(e) => onChange({ ...rule, operator: e.target.value as OperatorType })}
-        className="flex-1 min-w-0 px-2 py-1.5 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+        className="flex-1 min-w-0 px-2 py-1.5 text-[13px] rounded-xl border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
       >
         {operators.map(op => (
           <option key={op.value} value={op.value}>{t(op.labelKey as keyof typeof t)}</option>
@@ -133,7 +133,7 @@ export default function SmartPlaylistRuleRow({ rule, tags, onChange, onRemove }:
             <select
               value={rule.value}
               onChange={(e) => onChange({ ...rule, value: e.target.value })}
-              className="flex-1 min-w-0 px-2 py-1.5 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+              className="flex-1 min-w-0 px-2 py-1.5 text-[13px] rounded-xl border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
             >
               <option value="">{t('smartPlaylist.selectTag')}</option>
               {tags.map(tag => (
@@ -144,7 +144,7 @@ export default function SmartPlaylistRuleRow({ rule, tags, onChange, onRemove }:
             <select
               value={rule.value}
               onChange={(e) => onChange({ ...rule, value: e.target.value })}
-              className="flex-1 min-w-0 px-2 py-1.5 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+              className="flex-1 min-w-0 px-2 py-1.5 text-[13px] rounded-xl border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
             >
               <option value="true">{t('context.favorite')}</option>
               <option value="false">{t('context.unfavorite')}</option>
@@ -155,7 +155,7 @@ export default function SmartPlaylistRuleRow({ rule, tags, onChange, onRemove }:
               value={rule.value}
               onChange={(e) => onChange({ ...rule, value: e.target.value })}
               placeholder={rule.operator === 'daysAgo' ? t('smartPlaylist.daysPlaceholder') : t('smartTags.value')}
-              className="flex-1 min-w-0 px-2 py-1.5 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+              className="flex-1 min-w-0 px-2 py-1.5 text-[13px] rounded-xl border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
             />
           )}
 
@@ -167,7 +167,7 @@ export default function SmartPlaylistRuleRow({ rule, tags, onChange, onRemove }:
                 value={rule.value2 || ''}
                 onChange={(e) => onChange({ ...rule, value2: e.target.value })}
                 placeholder={t('smartTags.value')}
-                className="w-20 px-2 py-1.5 text-[13px] rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                className="w-20 px-2 py-1.5 text-[13px] rounded-xl border-0 bg-surface-200/50 dark:bg-surface-800/50 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
               />
             </>
           )}

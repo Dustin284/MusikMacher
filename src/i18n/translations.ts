@@ -10,6 +10,10 @@ const de = {
   'app.removeLibrary': 'Bibliothek entfernen',
   'app.removeLibraryNotEmpty': 'Bibliothek enthält Songs und kann nicht gelöscht werden. Entferne zuerst alle Songs.',
 
+  // Sidebar
+  'sidebar.libraries': 'Bibliotheken',
+  'sidebar.tools': 'Werkzeuge',
+
   // Tabs
   'tabs.songs': 'Songs',
   'tabs.effects': 'Effekte',
@@ -164,6 +168,7 @@ const de = {
   'settings.tagModeAnd': 'Alle Tags (UND)',
   'settings.appearance': 'Darstellung',
   'settings.windowTitle': 'Fenstertitel',
+  'settings.compactPlayer': 'Kompakter Mini-Player',
   'settings.language': 'Sprache',
   'settings.options': 'Optionen',
   'settings.loadCovers': 'Album-Cover laden',
@@ -410,6 +415,7 @@ const de = {
   'stemSeparation.installDemucs': 'Demucs installieren',
   'stemSeparation.noPython': 'Python nicht gefunden. Bitte installiere Python 3.8+ von python.org und starte die App neu.',
   'stemSeparation.selectModel': 'Modell wählen',
+  'stemSeparation.model2': '2 Stems (Vocal/Instrumental)',
   'stemSeparation.model4': '4 Stems (Standard)',
   'stemSeparation.model6': '6 Stems (Erweitert)',
   'stemSeparation.installing': 'Demucs wird installiert...',
@@ -524,6 +530,27 @@ const de = {
   'lrc.start': 'LRC generieren',
   'lrc.tryAgain': 'Erneut versuchen',
   'lrc.saved': 'LRC gespeichert!',
+
+  // Twitch Chatbot
+  'twitch.title': 'Twitch Chatbot',
+  'twitch.enable': 'Twitch-Chatbot aktivieren',
+  'twitch.channel': 'Kanal-Name',
+  'twitch.channelPlaceholder': 'dein_kanal',
+  'twitch.botUsername': 'Bot-Benutzername (optional)',
+  'twitch.botUsernamePlaceholder': 'mein_bot',
+  'twitch.oauthToken': 'OAuth-Token (optional)',
+  'twitch.oauthHint': 'Fuer Chat-Antworten noetig. Token von twitchtokengenerator.com',
+  'twitch.voteskipThreshold': 'Voteskip-Schwelle (Stimmen)',
+  'twitch.allowSr': 'Song Requests erlauben (!sr)',
+  'twitch.srCategory': 'Song Requests importieren in',
+  'twitch.allowSkip': 'Mod-Skip erlauben (!skip)',
+  'twitch.connected': 'Verbunden mit #{channel}',
+  'twitch.disconnected': 'Nicht verbunden',
+  'twitch.commands': 'Chat-Befehle',
+  'twitch.cmdSr': 'Song per YouTube/Spotify/SoundCloud-Link anfordern',
+  'twitch.cmdSong': 'Aktuellen Song im Chat anzeigen',
+  'twitch.cmdSkip': 'Aktuellen Track ueberspringen (nur Mods)',
+  'twitch.cmdVoteskip': 'Fuer Skip abstimmen (alle Zuschauer)',
 }
 
 const en: typeof de = {
@@ -535,6 +562,10 @@ const en: typeof de = {
   'app.newLibraryName': 'Library name',
   'app.removeLibrary': 'Remove library',
   'app.removeLibraryNotEmpty': 'Library contains songs and cannot be deleted. Remove all songs first.',
+
+  // Sidebar
+  'sidebar.libraries': 'Libraries',
+  'sidebar.tools': 'Tools',
 
   // Tabs
   'tabs.songs': 'Songs',
@@ -690,6 +721,7 @@ const en: typeof de = {
   'settings.tagModeAnd': 'All tags (AND)',
   'settings.appearance': 'Appearance',
   'settings.windowTitle': 'Window title',
+  'settings.compactPlayer': 'Compact mini player',
   'settings.language': 'Language',
   'settings.options': 'Options',
   'settings.loadCovers': 'Load album covers',
@@ -936,6 +968,7 @@ const en: typeof de = {
   'stemSeparation.installDemucs': 'Install Demucs',
   'stemSeparation.noPython': 'Python not found. Please install Python 3.8+ from python.org and restart the app.',
   'stemSeparation.selectModel': 'Select model',
+  'stemSeparation.model2': '2 Stems (Vocal/Instrumental)',
   'stemSeparation.model4': '4 Stems (Standard)',
   'stemSeparation.model6': '6 Stems (Extended)',
   'stemSeparation.installing': 'Installing Demucs...',
@@ -1050,6 +1083,27 @@ const en: typeof de = {
   'lrc.start': 'Generate LRC',
   'lrc.tryAgain': 'Try again',
   'lrc.saved': 'LRC saved!',
+
+  // Twitch Chatbot
+  'twitch.title': 'Twitch Chatbot',
+  'twitch.enable': 'Enable Twitch chatbot',
+  'twitch.channel': 'Channel name',
+  'twitch.channelPlaceholder': 'your_channel',
+  'twitch.botUsername': 'Bot username (optional)',
+  'twitch.botUsernamePlaceholder': 'my_bot',
+  'twitch.oauthToken': 'OAuth Token (optional)',
+  'twitch.oauthHint': 'Required for chat replies. Get token from twitchtokengenerator.com',
+  'twitch.voteskipThreshold': 'Voteskip threshold (votes)',
+  'twitch.allowSr': 'Allow song requests (!sr)',
+  'twitch.srCategory': 'Import song requests into',
+  'twitch.allowSkip': 'Allow mod skip (!skip)',
+  'twitch.connected': 'Connected to #{channel}',
+  'twitch.disconnected': 'Not connected',
+  'twitch.commands': 'Chat commands',
+  'twitch.cmdSr': 'Request a song via YouTube/Spotify/SoundCloud link',
+  'twitch.cmdSong': 'Show current song in chat',
+  'twitch.cmdSkip': 'Skip current track (mods only)',
+  'twitch.cmdVoteskip': 'Vote to skip (all viewers)',
 }
 
 export const translations: Record<string, typeof de> = {

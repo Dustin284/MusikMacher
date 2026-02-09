@@ -2205,7 +2205,7 @@ ipcMain.handle('separate-stems', async (event, trackId, model) => {
     if (fs.existsSync(outputDir)) fs.rmSync(outputDir, { recursive: true, force: true })
     fs.mkdirSync(outputDir, { recursive: true })
 
-    // Model selection: htdemucs (4 stems) or htdemucs_6s (6 stems)
+    // Model selection: htdemucs (2 or 4 stems) or htdemucs_6s (6 stems)
     const modelName = model === '6' ? 'htdemucs_6s' : 'htdemucs'
 
     // Use cached CUDA info (populated at app start) instead of running Python again
@@ -2222,6 +2222,11 @@ ipcMain.handle('separate-stems', async (event, trackId, model) => {
         '-o', outputDir,
         '--mp3',
       ]
+
+      // 2-stem mode: only separate vocals vs instrumental
+      if (model === '2') {
+        args.push('--two-stems', 'vocals')
+      }
 
       // Add device flag for GPU acceleration
       if (useCuda) {
@@ -2956,6 +2961,139 @@ ipcMain.handle('obs-select-text-file-path', async () => {
   })
   if (result.canceled || !result.filePath) return null
   return result.filePath
+})
+
+// --- Twitch Chatbot Integration ---
+const twitchBot = require('./twitchBot.cjs')
+
+twitchBot.setEventCallback((type, data) => {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+
+  switch (type) {
+    case 'connected':
+    case 'disconnected':
+    case 'skip':
+    case 'voteskip-reached':
+    case 'voteskip-vote':
+      mainWindow.webContents.send('twitch-event', { type, ...data })
+      break
+    case 'song-query':
+    case 'song-request':
+      if (type === 'song-request') handleTwitchSongRequest(data.url, data.username)
+      else mainWindow.webContents.send('twitch-event', { type, ...data })
+      break
+    case 'sr-duplicate':
+      twitchBot.say(`@${data.username} Song wird bereits geladen/ist in der Warteschlange.`)
+      break
+  }
+})
+
+// Resolve video title without downloading (fast metadata fetch)
+function getVideoTitle(url) {
+  return new Promise((resolve) => {
+    const ytdlpPath = getYtdlpPath()
+    if (!fs.existsSync(ytdlpPath)) { resolve(null); return }
+    const proc = spawn(ytdlpPath, ['--print', 'title', '--no-check-certificates', '--no-playlist', url])
+    let output = ''
+    const timer = setTimeout(() => { try { proc.kill() } catch {} resolve(null) }, 15000)
+    proc.stdout.on('data', (d) => { output += d.toString() })
+    proc.on('close', () => { clearTimeout(timer); resolve(output.trim() || null) })
+    proc.on('error', () => { clearTimeout(timer); resolve(null) })
+  })
+}
+
+async function handleTwitchSongRequest(url, username) {
+  // Validate URL (YouTube, Spotify, SoundCloud)
+  const isYouTube = /(?:youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts\/)/i.test(url)
+  const isSpotify = /open\.spotify\.com\/(?:intl-[a-z]{2}\/)?track\//i.test(url)
+  const isSoundCloud = /soundcloud\.com\/.+\/.+/i.test(url)
+
+  if (!isYouTube && !isSpotify && !isSoundCloud) {
+    twitchBot.say(`@${username} Ungueltige URL. YouTube, Spotify oder SoundCloud Links erlaubt.`)
+    mainWindow.webContents.send('twitch-event', { type: 'sr-error', username, error: 'invalid-url' })
+    return
+  }
+
+  const ytdlpPath = getYtdlpPath()
+  if (!fs.existsSync(ytdlpPath)) {
+    twitchBot.say(`@${username} Download nicht moeglich (yt-dlp nicht installiert).`)
+    return
+  }
+
+  mainWindow.webContents.send('twitch-event', { type: 'sr-downloading', username, url })
+
+  try {
+    let title = null
+    let downloadUrl = url
+
+    // Resolve title first (fast, no download)
+    if (isSpotify) {
+      title = await resolveSpotifyTrack(url)
+      if (!title) {
+        twitchBot.say(`@${username} Spotify-Track konnte nicht aufgeloest werden.`)
+        return
+      }
+      downloadUrl = `ytsearch1:${title}`
+    } else {
+      title = await getVideoTitle(url)
+    }
+
+    // Send resolved title to renderer — renderer checks DB for existing track
+    mainWindow.webContents.send('twitch-sr-resolved', { title, downloadUrl, username })
+  } catch (err) {
+    twitchBot.say(`@${username} Fehler: ${err.message}`)
+  }
+}
+
+// Actual download triggered by renderer after DB check
+ipcMain.handle('twitch-download-sr', async (_event, downloadUrl, username) => {
+  try {
+    const ytdlpPath = getYtdlpPath()
+    const downloadDir = path.join(app.getPath('temp'), 'lorus-downloads')
+    if (!fs.existsSync(downloadDir)) fs.mkdirSync(downloadDir, { recursive: true })
+
+    const result = await downloadSingleTrack(ytdlpPath, downloadUrl, downloadDir)
+    if (result.success) {
+      mainWindow.webContents.send('twitch-sr-ready', {
+        fileName: result.fileName,
+        fileData: result.fileData,
+        filePath: result.filePath,
+        username,
+      })
+      const songName = result.fileName.replace(/\.[^.]+$/, '')
+      twitchBot.say(`@${username} In Warteschlange: ${songName}`)
+    } else {
+      twitchBot.say(`@${username} Download fehlgeschlagen: ${result.error || 'Unbekannter Fehler'}`)
+    }
+  } catch (err) {
+    twitchBot.say(`@${username} Fehler: ${err.message}`)
+  }
+})
+
+ipcMain.handle('twitch-connect', async (_event, cfg) => {
+  try {
+    await twitchBot.connect(cfg)
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
+
+ipcMain.handle('twitch-disconnect', async () => {
+  try {
+    await twitchBot.disconnect()
+    return { success: true }
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+})
+
+ipcMain.on('twitch-reset-voteskip', () => {
+  twitchBot.resetVoteskip()
+})
+
+ipcMain.on('twitch-say', (_event, message) => {
+  twitchBot.say(message)
 })
 
 app.whenReady().then(() => {

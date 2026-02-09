@@ -56,7 +56,7 @@ export default function LogViewer() {
   const levelBadgeBg = (level: string): string => {
     switch (level) {
       case 'debug':
-        return 'bg-surface-200/60 dark:bg-surface-700/60'
+        return 'bg-surface-200/30 dark:bg-surface-700/30'
       case 'info':
         return 'bg-blue-500/10'
       case 'warn':
@@ -64,7 +64,7 @@ export default function LogViewer() {
       case 'error':
         return 'bg-red-500/10'
       default:
-        return 'bg-surface-200/60 dark:bg-surface-700/60'
+        return 'bg-surface-200/30 dark:bg-surface-700/30'
     }
   }
 
@@ -82,15 +82,15 @@ export default function LogViewer() {
   }
 
   return (
-    <div className="flex flex-col h-full rounded-xl bg-surface-100/50 dark:bg-surface-800/50 border border-surface-200/60 dark:border-surface-700/60 overflow-hidden">
+    <div className="flex flex-col h-full rounded-xl bg-surface-100/50 dark:bg-surface-800/50 border-0 shadow-sonoma overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-surface-200/60 dark:border-surface-700/60 shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 border-b separator-sonoma shrink-0">
         <h3 className="text-[13px] font-semibold text-surface-700 dark:text-surface-300">
           {t('log.title')}
         </h3>
         <button
           onClick={handleClear}
-          className="px-2.5 py-1 text-[11px] font-medium rounded-md text-surface-500 hover:bg-surface-200/60 dark:hover:bg-surface-700/60 transition-colors"
+          className="px-2.5 py-1 text-[11px] font-medium rounded-xl text-surface-500 hover:bg-surface-200/30 dark:hover:bg-surface-700/30 transition-colors"
         >
           {t('log.clear')}
         </button>

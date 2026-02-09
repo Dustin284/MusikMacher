@@ -8,7 +8,6 @@ import { useTranslation } from '../i18n/useTranslation'
 import TagSidebar from './TagSidebar'
 import TrackGrid from './TrackGrid'
 import MediaBrowser from './MediaBrowser'
-import Player from './Player'
 
 // Convert a keyboard event into our shortcut key string format
 function eventToKey(e: KeyboardEvent): string {
@@ -170,12 +169,12 @@ export default function Browse({ category, isActive }: BrowseProps) {
         <TagSidebar />
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           {/* View toggle */}
-          <div className="flex items-center gap-1 px-3 pt-2 shrink-0">
+          <div className="flex items-center gap-1.5 px-4 pt-3 shrink-0">
             <button
               onClick={() => setViewMode('list')}
-              className={`p-1.5 rounded-lg transition-all ${
+              className={`p-2 rounded-xl transition-all ${
                 viewMode === 'list'
-                  ? 'bg-primary-500/10 text-primary-500'
+                  ? 'bg-surface-100 dark:bg-surface-800 text-primary-500'
                   : 'text-surface-400 hover:bg-surface-200/60 dark:hover:bg-surface-800/60'
               }`}
               title={t('mediaBrowser.listView')}
@@ -186,9 +185,9 @@ export default function Browse({ category, isActive }: BrowseProps) {
             </button>
             <button
               onClick={() => setViewMode('media')}
-              className={`p-1.5 rounded-lg transition-all ${
+              className={`p-2 rounded-xl transition-all ${
                 viewMode === 'media'
-                  ? 'bg-primary-500/10 text-primary-500'
+                  ? 'bg-surface-100 dark:bg-surface-800 text-primary-500'
                   : 'text-surface-400 hover:bg-surface-200/60 dark:hover:bg-surface-800/60'
               }`}
               title={t('mediaBrowser.gridView')}
@@ -206,9 +205,6 @@ export default function Browse({ category, isActive }: BrowseProps) {
             <TrackGrid category={category} isActive={isActive} />
           )}
         </div>
-      </div>
-      <div className="shrink-0">
-        <Player />
       </div>
     </div>
   )

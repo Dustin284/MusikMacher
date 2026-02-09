@@ -46,7 +46,7 @@ export default function ClipboardToast({ url, platform, onDownload, onDismiss }:
         visible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'
       }`}
     >
-      <div className="bg-white dark:bg-surface-800 rounded-xl shadow-2xl border border-surface-200/60 dark:border-surface-700/60 p-4 backdrop-blur-xl">
+      <div className="bg-white dark:bg-surface-800 rounded-2xl shadow-sonoma border-0 p-4 backdrop-blur-xl">
         {/* Header row */}
         <div className="flex items-start gap-3">
           {/* Platform icon */}
@@ -98,7 +98,7 @@ export default function ClipboardToast({ url, platform, onDownload, onDismiss }:
         {/* Download button */}
         <button
           onClick={handleDownload}
-          className="w-full mt-3 flex items-center justify-center gap-2 px-3 py-2 text-[13px] font-semibold rounded-lg bg-gradient-to-br from-primary-400 to-primary-600 text-white hover:from-primary-500 hover:to-primary-700 transition-all duration-200 active:scale-[0.98] shadow-lg shadow-primary-500/20"
+          className="w-full mt-3 flex items-center justify-center gap-2 px-3 py-2.5 text-[13px] font-semibold rounded-xl bg-primary-500 hover:bg-primary-600 text-white transition-all duration-200 active:scale-[0.98] shadow-sm"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />

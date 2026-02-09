@@ -127,6 +127,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('lrc-progress', (_event, data) => cb(data))
   },
 
+  // Twitch Chatbot
+  twitchConnect: (config) => ipcRenderer.invoke('twitch-connect', config),
+  twitchDisconnect: () => ipcRenderer.invoke('twitch-disconnect'),
+  twitchSay: (message) => ipcRenderer.send('twitch-say', message),
+  twitchResetVoteskip: () => ipcRenderer.send('twitch-reset-voteskip'),
+  onTwitchEvent: (cb) => {
+    ipcRenderer.removeAllListeners('twitch-event')
+    ipcRenderer.on('twitch-event', (_e, d) => cb(d))
+  },
+  onTwitchSrResolved: (cb) => {
+    ipcRenderer.removeAllListeners('twitch-sr-resolved')
+    ipcRenderer.on('twitch-sr-resolved', (_e, d) => cb(d))
+  },
+  twitchDownloadSr: (downloadUrl, username) => ipcRenderer.invoke('twitch-download-sr', downloadUrl, username),
+  onTwitchSrReady: (cb) => {
+    ipcRenderer.removeAllListeners('twitch-sr-ready')
+    ipcRenderer.on('twitch-sr-ready', (_e, d) => cb(d))
+  },
+
   // Debug
   debugBinState: () => ipcRenderer.invoke('debug-bin-state'),
 })

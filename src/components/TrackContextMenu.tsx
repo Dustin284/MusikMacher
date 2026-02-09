@@ -253,21 +253,22 @@ export default function TrackContextMenu({
   return createPortal(
     <div
       ref={menuRef}
-      className="fixed z-[9999] min-w-[180px] py-1.5 rounded-xl bg-white dark:bg-surface-800 shadow-xl shadow-black/20 ring-1 ring-black/10 dark:ring-white/10 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100"
+      className="fixed z-[9999] min-w-[180px] py-1.5 rounded-xl bg-white/95 dark:bg-surface-800/95 shadow-sonoma backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-100"
       style={{ left: x, top: y }}
     >
       {visibleItems.map((item, idx) => (
         <div key={idx}>
           {item.separator && idx > 0 && (
-            <div className="my-1 border-t border-surface-200/60 dark:border-surface-700/60" />
+            <div className="my-1 border-t separator-sonoma" />
           )}
           <button
             onClick={item.onClick}
-            className={`w-full flex items-center gap-2.5 px-3 py-1.5 text-[13px] transition-colors ${
+            className={`w-full flex items-center gap-2.5 px-3.5 py-2 mx-1 rounded-lg text-[13px] transition-colors ${
               item.danger
                 ? 'text-red-500 hover:bg-red-500/10'
                 : 'text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700/60'
             }`}
+            style={{ width: 'calc(100% - 8px)' }}
           >
             <svg
               className={`w-4 h-4 shrink-0 ${item.danger ? 'text-red-500' : 'text-surface-400'}`}
@@ -285,7 +286,7 @@ export default function TrackContextMenu({
       {/* Rating */}
       {onRate && (
         <>
-          <div className="my-1 border-t border-surface-200/60 dark:border-surface-700/60" />
+          <div className="my-1 border-t separator-sonoma" />
           <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-surface-400">
             {t('context.rate')}
           </div>
@@ -311,7 +312,7 @@ export default function TrackContextMenu({
       {/* Tag assignment */}
       {tags && tags.length > 0 && onTagToggle && (
         <>
-          <div className="my-1 border-t border-surface-200/60 dark:border-surface-700/60" />
+          <div className="my-1 border-t separator-sonoma" />
           <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-surface-400">
             Tags
           </div>
@@ -346,7 +347,7 @@ export default function TrackContextMenu({
       {/* Project assignment */}
       {projects && projects.length > 0 && onProjectAssign && (
         <>
-          <div className="my-1 border-t border-surface-200/60 dark:border-surface-700/60" />
+          <div className="my-1 border-t separator-sonoma" />
           <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-surface-400">
             {t('project.assign')}
           </div>

@@ -140,6 +140,23 @@ export interface ElectronAPI {
   }>
   onDemucsProgress?: (cb: (data: { percent: number; phase: string }) => void) => void
   onSeparationProgress?: (cb: (data: { percent: number; phase: string }) => void) => void
+
+  // Twitch Chatbot
+  twitchConnect?: (config: {
+    channel: string
+    oauthToken?: string
+    botUsername?: string
+    voteskipThreshold?: number
+    songRequestEnabled?: boolean
+    modSkipEnabled?: boolean
+  }) => Promise<{ success: boolean; error?: string }>
+  twitchDisconnect?: () => Promise<{ success: boolean; error?: string }>
+  twitchSay?: (message: string) => void
+  twitchResetVoteskip?: () => void
+  onTwitchEvent?: (cb: (data: { type: string; [key: string]: any }) => void) => void
+  onTwitchSrResolved?: (cb: (data: { title: string | null; downloadUrl: string; username: string }) => void) => void
+  twitchDownloadSr?: (downloadUrl: string, username: string) => Promise<void>
+  onTwitchSrReady?: (cb: (data: { fileName: string; fileData: ArrayBuffer; filePath: string; username: string }) => void) => void
 }
 
 declare global {

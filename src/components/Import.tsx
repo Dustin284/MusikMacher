@@ -197,10 +197,10 @@ export default function Import({ initialDownloadUrl, onInitialUrlConsumed }: Imp
   const isElectron = typeof window !== 'undefined' && !!window.electronAPI
 
   return (
-    <div className="p-6 max-w-2xl mx-auto flex flex-col gap-5 h-full overflow-y-auto">
+    <div className="p-8 flex flex-col gap-5 h-full overflow-y-auto">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center shadow-lg shadow-primary-500/20">
+        <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center shadow-lg shadow-primary-500/20">
           <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
           </svg>
@@ -211,162 +211,170 @@ export default function Import({ initialDownloadUrl, onInitialUrlConsumed }: Imp
         </div>
       </div>
 
-      {/* Import destination */}
-      <div className="bg-white/60 dark:bg-surface-800/40 backdrop-blur-sm rounded-xl p-4 border border-surface-200/60 dark:border-surface-800/60 flex flex-col gap-3">
-        <div>
-          <label className="text-[13px] font-medium mb-1.5 block text-surface-600 dark:text-surface-400">{t('import.importInto')}</label>
-          <Listbox value={importInto} onChange={setImportInto}>
-            <div className="relative">
-              <ListboxButton className="relative w-full cursor-pointer rounded-lg border border-surface-200 dark:border-surface-700 bg-white/80 dark:bg-surface-800/80 py-2 pl-3 pr-10 text-left text-[13px] focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all">
-                <span>{categories.find(c => c.value === importInto)?.label || '—'}</span>
-                <span className="absolute inset-y-0 right-0 flex items-center pr-2">
-                  <svg className="w-4 h-4 text-surface-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
-                  </svg>
-                </span>
-              </ListboxButton>
-              <ListboxOptions className="absolute z-10 mt-1 w-full rounded-xl bg-white dark:bg-surface-800 shadow-xl ring-1 ring-black/5 dark:ring-white/10 py-1 text-[13px] backdrop-blur-xl">
-                {categories.map((cat) => (
-                  <ListboxOption key={cat.value} value={cat.value} className="cursor-pointer select-none px-3 py-2 data-[focus]:bg-primary-500/10 data-[selected]:font-semibold transition-colors">
-                    {cat.label}
-                  </ListboxOption>
-                ))}
-              </ListboxOptions>
+      {/* Two-column layout: File Import | Download */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 flex-1 min-h-0">
+        {/* Left column: File Import */}
+        <div className="flex flex-col gap-5">
+          {/* Import destination */}
+          <div className="bg-white/60 dark:bg-surface-800/40 backdrop-blur-sm rounded-2xl p-4 border-0 shadow-sonoma flex flex-col gap-3">
+            <div>
+              <label className="text-[13px] font-medium mb-1.5 block text-surface-600 dark:text-surface-400">{t('import.importInto')}</label>
+              <Listbox value={importInto} onChange={setImportInto}>
+                <div className="relative">
+                  <ListboxButton className="relative w-full cursor-pointer rounded-xl border-0 bg-surface-200/50 dark:bg-surface-800/50 py-2 pl-3 pr-10 text-left text-[13px] focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all">
+                    <span>{categories.find(c => c.value === importInto)?.label || '—'}</span>
+                    <span className="absolute inset-y-0 right-0 flex items-center pr-2">
+                      <svg className="w-4 h-4 text-surface-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                      </svg>
+                    </span>
+                  </ListboxButton>
+                  <ListboxOptions className="absolute z-10 mt-1 w-full rounded-2xl bg-white dark:bg-surface-800 shadow-xl ring-1 ring-black/5 dark:ring-white/10 py-1 text-[13px] backdrop-blur-xl">
+                    {categories.map((cat) => (
+                      <ListboxOption key={cat.value} value={cat.value} className="cursor-pointer select-none px-3 py-2 data-[focus]:bg-primary-500/10 data-[selected]:font-semibold transition-colors">
+                        {cat.label}
+                      </ListboxOption>
+                    ))}
+                  </ListboxOptions>
+                </div>
+              </Listbox>
             </div>
-          </Listbox>
-        </div>
 
-        <label className="flex items-center gap-2 text-[13px] cursor-pointer text-surface-600 dark:text-surface-400">
-          <input type="checkbox" checked={subfoldersTag} onChange={(e) => setSubfoldersTag(e.target.checked)} />
-          {t('import.subfoldersTag')}
-        </label>
+            <label className="flex items-center gap-2 text-[13px] cursor-pointer text-surface-600 dark:text-surface-400">
+              <input type="checkbox" checked={subfoldersTag} onChange={(e) => setSubfoldersTag(e.target.checked)} />
+              {t('import.subfoldersTag')}
+            </label>
 
-        {isElectron && (
-          <label className="flex items-center gap-2 text-[13px] cursor-pointer text-surface-600 dark:text-surface-400">
-            <input type="checkbox" checked={rememberLocation} onChange={(e) => setRememberLocation(e.target.checked)} />
-            {t('import.rememberLocation')}
-          </label>
-        )}
-      </div>
+            {isElectron && (
+              <label className="flex items-center gap-2 text-[13px] cursor-pointer text-surface-600 dark:text-surface-400">
+                <input type="checkbox" checked={rememberLocation} onChange={(e) => setRememberLocation(e.target.checked)} />
+                {t('import.rememberLocation')}
+              </label>
+            )}
+          </div>
 
-      {/* Import buttons */}
-      <div className="flex gap-3">
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={importing}
-          className="flex-1 flex items-center justify-center gap-2 px-4 py-3 text-[13px] font-semibold rounded-xl bg-gradient-to-br from-primary-400 to-primary-600 text-white hover:from-primary-500 hover:to-primary-700 disabled:opacity-50 transition-all duration-200 active:scale-[0.98] shadow-lg shadow-primary-500/20"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          {t('import.selectFiles')}
-        </button>
-        <button
-          onClick={isElectron ? handleElectronFolderImport : () => folderInputRef.current?.click()}
-          disabled={importing}
-          className="flex-1 flex items-center justify-center gap-2 px-4 py-3 text-[13px] font-semibold rounded-xl border-2 border-surface-200 dark:border-surface-700 hover:border-primary-500/50 hover:bg-primary-500/5 disabled:opacity-50 transition-all duration-200 active:scale-[0.98]"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-          </svg>
-          {t('import.selectFolder')}
-        </button>
-        <input ref={fileInputRef} type="file" accept="audio/*" multiple className="hidden" onChange={(e) => handleImportFiles(e.target.files)} />
-        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-        <input ref={folderInputRef} type="file" {...{ webkitdirectory: '' } as any} multiple className="hidden" onChange={(e) => handleImportFiles(e.target.files)} />
-      </div>
+          {/* Import buttons */}
+          <div className="flex gap-3">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={importing}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 text-[13px] font-semibold rounded-xl bg-primary-500 hover:bg-primary-600 text-white disabled:opacity-50 transition-all duration-200 active:scale-[0.98] shadow-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              {t('import.selectFiles')}
+            </button>
+            <button
+              onClick={isElectron ? handleElectronFolderImport : () => folderInputRef.current?.click()}
+              disabled={importing}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 text-[13px] font-semibold rounded-xl border border-surface-200 dark:border-surface-700 hover:border-primary-500/50 hover:bg-primary-500/5 disabled:opacity-50 transition-all duration-200 active:scale-[0.98]"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+              </svg>
+              {t('import.selectFolder')}
+            </button>
+            <input ref={fileInputRef} type="file" accept="audio/*" multiple className="hidden" onChange={(e) => handleImportFiles(e.target.files)} />
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+            <input ref={folderInputRef} type="file" {...{ webkitdirectory: '' } as any} multiple className="hidden" onChange={(e) => handleImportFiles(e.target.files)} />
+          </div>
 
-      {/* Saved import locations */}
-      {savedLocations.length > 0 && (
-        <div className="bg-white/60 dark:bg-surface-800/40 backdrop-blur-sm rounded-xl p-4 border border-surface-200/60 dark:border-surface-800/60">
-          <h3 className="text-[12px] font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-3">
-            {t('import.savedLocations')}
-          </h3>
-          <div className="space-y-2">
-            {savedLocations.map((loc) => (
-              <div key={loc.id} className="flex items-center gap-2 text-[13px]">
-                <svg className="w-4 h-4 text-surface-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                </svg>
-                <span className="flex-1 truncate text-surface-700 dark:text-surface-300" title={loc.path}>{loc.path}</span>
-                {loc.lastSyncAt && (
-                  <span className="text-[10px] text-surface-400 shrink-0">
-                    {t('import.lastSync')}: {new Date(loc.lastSyncAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-                  </span>
-                )}
-                <button
-                  onClick={() => handleToggleWatch(loc)}
-                  className={`p-1 rounded-md transition-colors ${
-                    loc.watchEnabled
-                      ? 'text-green-500 bg-green-500/10 hover:bg-green-500/20'
-                      : 'text-surface-400 hover:text-surface-600 hover:bg-surface-200/60 dark:hover:bg-surface-700/40'
-                  }`}
-                  title={loc.watchEnabled ? t('import.watching') : t('import.watch')}
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => handleSyncLocation(loc)}
-                  disabled={syncing === loc.id}
-                  className="px-2 py-1 text-[11px] font-medium rounded-md bg-primary-500/10 text-primary-600 dark:text-primary-400 hover:bg-primary-500/20 transition-colors disabled:opacity-50"
-                >
-                  {syncing === loc.id ? '...' : t('import.sync')}
-                </button>
-                <button
-                  onClick={() => handleRemoveLocation(loc.id!)}
-                  className="p-1 rounded-md text-surface-400 hover:text-red-500 hover:bg-red-500/10 transition-colors"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+          {/* Saved import locations */}
+          {savedLocations.length > 0 && (
+            <div className="bg-white/60 dark:bg-surface-800/40 backdrop-blur-sm rounded-2xl p-4 border-0 shadow-sonoma">
+              <h3 className="text-[12px] font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-3">
+                {t('import.savedLocations')}
+              </h3>
+              <div className="space-y-2">
+                {savedLocations.map((loc) => (
+                  <div key={loc.id} className="flex items-center gap-2 text-[13px]">
+                    <svg className="w-4 h-4 text-surface-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.75" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                    </svg>
+                    <span className="flex-1 truncate text-surface-700 dark:text-surface-300" title={loc.path}>{loc.path}</span>
+                    {loc.lastSyncAt && (
+                      <span className="text-[10px] text-surface-400 shrink-0">
+                        {t('import.lastSync')}: {new Date(loc.lastSyncAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => handleToggleWatch(loc)}
+                      className={`p-1 rounded-md transition-colors ${
+                        loc.watchEnabled
+                          ? 'text-green-500 bg-green-500/10 hover:bg-green-500/20'
+                          : 'text-surface-400 hover:text-surface-600 hover:bg-surface-200/60 dark:hover:bg-surface-700/40'
+                      }`}
+                      title={loc.watchEnabled ? t('import.watching') : t('import.watch')}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => handleSyncLocation(loc)}
+                      disabled={syncing === loc.id}
+                      className="px-2 py-1 text-[11px] font-medium rounded-md bg-primary-500/10 text-primary-600 dark:text-primary-400 hover:bg-primary-500/20 transition-colors disabled:opacity-50"
+                    >
+                      {syncing === loc.id ? '...' : t('import.sync')}
+                    </button>
+                    <button
+                      onClick={() => handleRemoveLocation(loc.id!)}
+                      className="p-1 rounded-md text-surface-400 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))}
+            </div>
+          )}
+
+          {/* Import progress bar */}
+          {importProgress && (
+            <div className="bg-white/60 dark:bg-surface-800/40 backdrop-blur-sm rounded-2xl p-4 border-0 shadow-sonoma">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[13px] text-surface-600 dark:text-surface-400 truncate mr-3">
+                  {t('import.progress', {
+                    current: importProgress.current,
+                    total: importProgress.total,
+                    name: importProgress.currentName,
+                  })}
+                </span>
+                <span className="text-[13px] font-semibold text-primary-600 dark:text-primary-400 shrink-0">
+                  {Math.round((importProgress.current / importProgress.total) * 100)}%
+                </span>
+              </div>
+              <div className="w-full h-2 bg-surface-200 dark:bg-surface-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-primary-400 to-primary-600 rounded-full transition-all duration-200"
+                  style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Log output */}
+          <div className="flex-1 min-h-[120px] rounded-2xl border-0 shadow-sm bg-surface-950/[0.03] dark:bg-surface-950/30 overflow-auto">
+            <div className="p-1.5 border-b border-surface-200/30 dark:border-surface-800/30 flex items-center gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
+              <div className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
+              <div className="w-2.5 h-2.5 rounded-full bg-green-400/80" />
+              <span className="ml-2 text-[10px] text-surface-400 font-mono">{t('import.logTitle')}</span>
+            </div>
+            <pre className="p-3 text-[12px] font-mono text-surface-600 dark:text-surface-400 whitespace-pre-wrap leading-relaxed">
+              {log_ || t('import.ready')}
+            </pre>
           </div>
         </div>
-      )}
 
-      {/* Download panel (YouTube/SoundCloud) */}
-      <DownloadPanel category={importInto} initialUrl={initialDownloadUrl} onInitialUrlConsumed={onInitialUrlConsumed} />
-
-      {/* Import progress bar */}
-      {importProgress && (
-        <div className="bg-white/60 dark:bg-surface-800/40 backdrop-blur-sm rounded-xl p-4 border border-surface-200/60 dark:border-surface-800/60">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[13px] text-surface-600 dark:text-surface-400 truncate mr-3">
-              {t('import.progress', {
-                current: importProgress.current,
-                total: importProgress.total,
-                name: importProgress.currentName,
-              })}
-            </span>
-            <span className="text-[13px] font-semibold text-primary-600 dark:text-primary-400 shrink-0">
-              {Math.round((importProgress.current / importProgress.total) * 100)}%
-            </span>
-          </div>
-          <div className="w-full h-2 bg-surface-200 dark:bg-surface-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-primary-400 to-primary-600 rounded-full transition-all duration-200"
-              style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
-            />
-          </div>
+        {/* Right column: Download panel */}
+        <div className="flex flex-col min-h-0">
+          <DownloadPanel category={importInto} initialUrl={initialDownloadUrl} onInitialUrlConsumed={onInitialUrlConsumed} />
         </div>
-      )}
-
-      {/* Log output */}
-      <div className="flex-1 min-h-[120px] rounded-xl border border-surface-200/60 dark:border-surface-800/60 bg-surface-950/[0.03] dark:bg-surface-950/30 overflow-auto">
-        <div className="p-1.5 border-b border-surface-200/60 dark:border-surface-800/60 flex items-center gap-1.5">
-          <div className="w-2.5 h-2.5 rounded-full bg-red-400/80" />
-          <div className="w-2.5 h-2.5 rounded-full bg-amber-400/80" />
-          <div className="w-2.5 h-2.5 rounded-full bg-green-400/80" />
-          <span className="ml-2 text-[10px] text-surface-400 font-mono">{t('import.logTitle')}</span>
-        </div>
-        <pre className="p-3 text-[12px] font-mono text-surface-600 dark:text-surface-400 whitespace-pre-wrap leading-relaxed">
-          {log_ || t('import.ready')}
-        </pre>
       </div>
     </div>
   )
